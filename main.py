@@ -9,12 +9,11 @@ FPS = 60
 WIDTH, HEIGHT = 1920, 1080
 GRAVITY = 0.25
 tile_width = tile_height = 100
-
-pygame.init()
-
 size = width, height = WIDTH, HEIGHT
 screen = pygame.display.set_mode(size)
 screen_rect = (0, 0, width, height)
+
+pygame.init()
 
 all_sprites = pygame.sprite.Group()
 tiles_group = pygame.sprite.Group()
@@ -245,8 +244,10 @@ def inventory():
             item.generate_sprite(inventory_board[y][x].x, inventory_board[y][x].y)
             print(sprite.rect.x, sprite.rect.y)
 
-    cell_clicked = None
+    cell_clicked = (0, 0, 1)
     while True:
+        screen.fill('#555555', inventory_board[cell_clicked[1]][cell_clicked[0]])
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
@@ -260,11 +261,26 @@ def inventory():
                         continue
                     break
 
-        # if cell_clicked:
-        #     inventory_image.fill('red', inventory_board[cell_clicked[1]][cell_clicked[0]] if cell_clicked[2] == 0 else
-        #     equipment_board[cell_clicked[1]][cell_clicked[0]])
-        #     screen.blit(inventory_image, (0, 0))
-        #     cell_clicked = None
+        if cell_clicked:
+            # inventory_image.fill('red', inventory_board[cell_clicked[1]][cell_clicked[0]] if cell_clicked[2] == 0 else
+            # equipment_board[cell_clicked[1]][cell_clicked[0]])
+            # screen.blit(inventory_image, (0, 0))
+            # cell_clicked = None
+            screen.fill('red', inventory_board[cell_clicked[1]][cell_clicked[0]])
+            screen.fill('#555555', (inventory_board[cell_clicked[1]][cell_clicked[0]].x + 10,
+                                    inventory_board[cell_clicked[1]][cell_clicked[0]].y + 10, 80, 80))
+
+            if len(player.inventory) >= cell_clicked[1] * 4 + cell_clicked[0] + 1:
+                screen.fill('#555555', (590, 670, 300, 140))
+                font = pygame.font.SysFont('TimesNewRoman', 20)
+                text = font.render(player.inventory[cell_clicked[1] * 4 + cell_clicked[0]].name,
+                                   True, pygame.color.Color('white'))
+                screen.blit(text, (595, 670))
+                font = pygame.font.SysFont('TimesNewRoman', 18)
+                for i, line in \
+                        enumerate(player.inventory[cell_clicked[1] * 4 + cell_clicked[0]].description.split('|')):
+                    text = font.render(line, True, pygame.color.Color('white'))
+                    screen.blit(text, (595, 695 + 15 * i))
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_e]:
@@ -281,10 +297,6 @@ tile_images = {
     'empty': load_image(f'grass{random.randint(1, 2)}.png')
 }
 
-
-# ------------------------------------------------------------------
-# КЛАССЫ
-# ------------------------------------------------------------------
 
 class Particle(pygame.sprite.Sprite):
     def __init__(self, pos, dx, dy):
@@ -442,7 +454,7 @@ class Player(pygame.sprite.Sprite):
                      / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
                 vy = bullet_direction_vector[1] \
                      / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
-                PlayerBullet(self.rect.x, self.rect.y, vx * 10, vy * 10, vy)
+                PlayerBullet(self.rect.x, self.rect.y, vx * 10, vy * 10, vy, vx)
                 self.can_shoot = False
 
         if pygame.sprite.spritecollideany(self, enemy_bullet_group):
@@ -476,10 +488,12 @@ class EnemyBullet(pygame.sprite.Sprite):
 
 
 class PlayerBullet(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, vx, vy, sin):
+    def __init__(self, pos_x, pos_y, vx, vy, sin, cos):
         super().__init__(all_sprites, player_bullet_group)
         self.press_allowed = True
         self.image = pygame.transform.scale(load_image('bread.png', True), (75, 75))
+        # angle = abs(math.asin(abs(sin)) * 180 / math.pi) if cos > 0 else abs(math.asin(sin) * 180 / math.pi) + 180
+        # print(sin, cos, angle)
         self.image = pygame.transform.rotate(self.image, (math.asin(sin) * 180 / math.pi))
         self.rect = self.image.get_rect()
         self.velocity = [vx, vy]
@@ -614,11 +628,11 @@ class Chest(pygame.sprite.Sprite):
         self.image = load_image(f'chest1_opened.png', True)
         player.inventory.add(RangedWeapon('Старый лук'))
         self.opened = True
+        create_particle(self.rect.x + 40, self.rect.y + 40, 15)
 
     def interact(self):
         if not self.locked and not self.opened:
             self.open()
-
 
 
 class Gui(pygame.sprite.Sprite):
@@ -655,13 +669,17 @@ class Inventory:
     def __bool__(self):
         return bool(self.items)
 
+    def __len__(self):
+        return len(self.items)
+
 
 class RangedWeapon:
     def __init__(self, *arg):
         con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
         cur = con.cursor()
         if type(arg[0]) == int:
-            data = cur.execute(f"""SELECT * FROM ranged_weapons
+            data = cur.execute(f"""SELECT name, description, damage, reload, durability, rareness, image_path
+                                   FROM ranged_weapons
                                    WHERE id = {arg[0]}""").fetchall()
         elif type(arg[0]) == str:
             data = cur.execute(f"""SELECT name, description, damage, reload, durability, rareness, image_path
@@ -669,9 +687,6 @@ class RangedWeapon:
                                    WHERE name = '{arg[0]}'""").fetchall()
         self.name, self.description, self.damage, self.reload_time, \
         self.durability, self.rareness, self.img_path = data[0]
-
-        print(self.name, self.description, self.damage, self.reload_time,
-              self.durability, self.rareness, self.img_path, sep='\n', end='\n\n')
 
     def generate_sprite(self, x, y):
         return RangedWeaponSprite(self.name, self.description, self.damage, self.reload_time,
@@ -684,18 +699,51 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
         self.name, self.description, self.damage, self.reload_time, \
         self.durability, self.rareness, self.img_path = \
             name, description, damage, reload, durability, rareness, image_path
-        print(self.img_path)
         self.image = pygame.transform.scale(load_image(self.img_path, True), (100, 100))
         self.rect = self.image.get_rect().move(x, y)
+
+    def update(self, *args, **kwargs):
+        pass
+
+
+class Item:
+    def __init__(self, *arg):
+        con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
+        cur = con.cursor()
+        if type(arg[0]) == int:
+            data = cur.execute(f"""SELECT name, description, image_path
+                                   FROM items
+                                   WHERE id = {arg[0]}""").fetchall()
+        elif type(arg[0]) == str:
+            data = cur.execute(f"""SELECT name, description, image_path
+                                   FROM items
+                                   WHERE name = '{arg[0]}'""").fetchall()
+        self.name, self.description, self.img_path = data[0]
+
+    def generate_sprite(self, x, y):
+        return ItemSprite(self.name, self.description, self.img_path, x, y)
+
+
+class ItemSprite(pygame.sprite.Sprite):
+    def __init__(self, name, description, image_path, x, y):
+        super().__init__(items_in_inventory)
+        self.name, self.description, self.img_path = name, description, image_path
+        self.image = pygame.transform.scale(load_image(self.img_path, True), (100, 100))
+        self.rect = self.image.get_rect().move(x, y)
+
+    def update(self, *args, **kwargs):
+        pass
 
 
 player = None
 clock = pygame.time.Clock()
 
-# start_screen()
 player, level_x, level_y = generate_level(load_level('map.txt'))
 camera = Camera()
 gui = Gui()
+
+player.inventory.add(RangedWeapon(1))
+player.inventory.add(Item('Горицвет'))
 
 running = True
 while running:
