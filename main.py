@@ -27,6 +27,9 @@ bar_group = pygame.sprite.Group()
 gui_group = pygame.sprite.Group()
 items_in_inventory = pygame.sprite.Group()
 
+layer1, layer2, layer3, layer4, layer5 = \
+    pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group()
+
 can_open_inventory = True
 
 
@@ -230,6 +233,10 @@ def win_screen():
         clock.tick(FPS)
 
 
+def generate_player_image():
+    pass
+
+
 def open_inventory():
     player.can_open_inventory = False
     inventory_image = load_image('inventory.png', True)
@@ -245,27 +252,34 @@ def open_inventory():
     inventory_board = [[pygame.Rect(x * 110 + 755, y * 110 + 270, 100, 100) for x in range(4)] for y in range(4)]
     equipment_board = [[pygame.Rect(x * 100 + 445, y * 100 + 270, 90, 90) for x in range(3)] for y in range(4)]
 
-    if player.inventory:
-        for i, item in enumerate(player.inventory):
-            y, x = i // 4, i % 4
-            a = item.generate_sprite(inventory_board[y][x].x, inventory_board[y][x].y)
-            a.image = pygame.transform.scale(a.image, (90, 90))
-            a.rect = a.rect.move(5, 5)
-    for elem, item in player.inventory.equipment.items():
-        if item is not None:
-            x, y = cells_equipment.get(elem)
-            a = item.generate_sprite(equipment_board[y][x].x, equipment_board[y][x].y)
-            a.image = pygame.transform.scale(a.image, (80, 80))
-            a.rect = a.rect.move(5, 5)
+    item = None
+    cell_clicked, prev_cell_clicked, preprev_cell_clicked = (0, 0, 0), None, None
 
-    cell_clicked = (0, 0, 0)
-
+    # Цикл
     while True:
+        # Отрисовка предметов
+        items_in_inventory.empty()
+        if player.inventory.items:
+            for i, item in enumerate(player.inventory):
+                y, x = i // 4, i % 4
+                a = item.generate_sprite(inventory_board[y][x].x, inventory_board[y][x].y)
+                a.image = pygame.transform.scale(a.image, (90, 90))
+                a.rect = a.rect.move(5, 5)
+        for elem, item in player.inventory.equipment.items():
+            if item is not None:
+                x, y = cells_equipment.get(elem)
+                a = item.generate_sprite(equipment_board[y][x].x, equipment_board[y][x].y)
+                a.image = pygame.transform.scale(a.image, (80, 80))
+                a.rect = a.rect.move(5, 5)
+
+        # Закрашиваем выбранную клетку и поле описания обратно в серый
         if cell_clicked[2] == 0:
             screen.fill('#555555', inventory_board[cell_clicked[1]][cell_clicked[0]])
         else:
             screen.fill('#555555', equipment_board[cell_clicked[1]][cell_clicked[0]])
+        screen.fill('#555555', (1205, 260, 280, 560))
 
+        # Выбор ячейки
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
@@ -273,13 +287,16 @@ def open_inventory():
                 for y in range(4):
                     for x in range(4):
                         if inventory_board[y][x].collidepoint(event.pos):
+                            prev_cell_clicked = cell_clicked[:]
                             cell_clicked = (x, y, 0)  # 0 - предмет в инвентаре
                             break
                         if x < 3:
                             if equipment_board[y][x].collidepoint(event.pos):
+                                prev_cell_clicked = cell_clicked[:]
                                 cell_clicked = (x, y, 1)  # 1 - предмет в снаряжении
                                 break
-        item = None
+
+        # Получение предмета в ячейке
         if cell_clicked:
             if cell_clicked[2] == 0:
                 screen.fill('red', inventory_board[cell_clicked[1]][cell_clicked[0]])
@@ -295,7 +312,15 @@ def open_inventory():
                     if player.inventory.equipment[equipment_cells.get(cell_clicked[:2])] is not None:
                         item = player.inventory.equipment[equipment_cells.get(cell_clicked[:2])]
 
-        screen.fill('#555555', (1205, 260, 280, 560))
+        if cell_clicked == prev_cell_clicked and cell_clicked[2] == 0:
+            equiped = inventory.equip(item)
+            prev_cell_clicked = None
+            if equiped:
+                cells_equipment.get(item.element)
+                screen.fill('#555555',
+                            equipment_board[cells_equipment.get(item.element)[1]]
+                            [cells_equipment.get(item.element)[0]])
+                item = None
 
         if item is not None:
             font = pygame.font.SysFont('TimesNewRoman', 22)
@@ -372,8 +397,14 @@ def level1():
         screen.blit(text, (20, 300))
         text = font.render(f"facing: {player.facing}", True, pygame.color.Color('black'))
         screen.blit(text, (20, 330))
+        text = font.render(f"HP: {player.HP}", True, pygame.color.Color('black'))
+        screen.blit(text, (20, 360))
 
-        all_sprites.draw(screen)
+        layer1.draw(screen)
+        layer2.draw(screen)
+        layer3.draw(screen)
+        layer4.draw(screen)
+        layer5.draw(screen)
         gui_group.draw(screen)
 
         camera.update(player)
@@ -396,7 +427,7 @@ tile_images = {
 
 class Particle(pygame.sprite.Sprite):
     def __init__(self, pos, dx, dy):
-        super().__init__(all_sprites)
+        super().__init__(all_sprites, layer4)
         size = random.choice((5, 10, 15, 20))
         self.image = pygame.Surface((size, size))
         self.image.fill(pygame.Color('red'))
@@ -425,7 +456,7 @@ class Particle(pygame.sprite.Sprite):
 
 class BulletParticle(pygame.sprite.Sprite):
     def __init__(self, pos):
-        super().__init__(all_sprites)
+        super().__init__(all_sprites, layer5)
         size = random.choice((1, 3, 5, 7))
         self.image = pygame.Surface((size, size))
         self.image.fill(pygame.Color('red'))
@@ -446,18 +477,19 @@ class BulletParticle(pygame.sprite.Sprite):
 
 class Tile(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
-        super().__init__(tiles_group, all_sprites)
+        super().__init__(tiles_group, all_sprites, layer1)
         if tile_type == 'empty':
             self.image = load_image(f'grass{random.randint(1, 7)}.png')
         elif tile_type == 'wall':
             self.image = load_image(f'wall.png')
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * pos_y)
+        self.mask = pygame.mask.from_surface(self.image)
 
 
 class Button(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
-        super().__init__(all_sprites)
+        super().__init__(all_sprites, layer2)
         self.press_allowed = True
         self.image = load_image('btn.png', True)
         self.rect = self.image.get_rect().move(
@@ -474,17 +506,23 @@ class Button(pygame.sprite.Sprite):
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
-        super().__init__(player_group, all_sprites)
+        super().__init__(player_group, all_sprites, layer4)
+        self.frames = {'south': [],
+                       'north': [],
+                       'east': [],
+                       'west': []}
         self.images = {
             'north': 'player\\player1_north.png',
             'east': 'player\\player1_east.png',
             'west': 'player\\player1_west.png',
             'south': 'player\\player1_south.png',
         }
-        self.image = pygame.transform.scale(load_image(self.images.get('south'), True), (128, 128))
-        self.rect = self.image.get_rect().move(
-            tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
+        self.cut_sheet(load_image('player\\player_sheet.png', True), 4, 4)
+        self.image = self.frames.get('south')[0]
+        self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
+        self.mask = pygame.mask.from_surface(self.image)
 
+        self.current_frame, self.walk_frame_change_timer = 0, 0
         self.HP, self.max_HP = 100, 100
         self.reload, self.reload_time = 0, 15
         self.can_shoot, self.can_open_inventory = True, True
@@ -501,6 +539,13 @@ class Player(pygame.sprite.Sprite):
                                          self.interact_range * 2, self.interact_range * 2)
 
         self.bars = []
+
+    def cut_sheet(self, sheet, columns, rows):
+        for j in range(rows):
+            names = ('south', 'north', 'west', 'east')
+            for i in range(columns):
+                frame_location = (128 * i, 128 * j)
+                self.frames[names[j]].append(sheet.subsurface(pygame.Rect(frame_location, (128, 128))))
 
     def refresh_bar(self, value_type):
         if value_type == 'HP':
@@ -531,49 +576,45 @@ class Player(pygame.sprite.Sprite):
             self.moving = True
             self.moving_direction[1] = 1
             self.facing = 'north'
-            # self.interact_rect = self.interact_rect.move(0, -self.speed)
             if pygame.sprite.spritecollideany(self, wall_group):
-                self.moving = False
-                self.moving_direction[1] = 0
-                self.rect = self.rect.move(0, self.speed)
-                # self.interact_rect = self.interact_rect.move(0, self.speed)
-
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.moving = False
+                    self.moving_direction[1] = 0
+                    self.rect = self.rect.move(0, self.speed)
         if keys[pygame.K_d]:
             self.rect = self.rect.move(self.speed, 0)
             self.moving = True
             self.moving_direction[0] = 1
             self.facing = 'east'
-            # self.interact_rect = self.interact_rect.move(self.speed, 0)
             if pygame.sprite.spritecollideany(self, wall_group):
-                self.moving = False
-                self.moving_direction[0] = 0
-                self.rect = self.rect.move(-self.speed, 0)
-                # self.interact_rect = self.interact_rect.move(-self.speed, 0)
-
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.moving = False
+                    self.moving_direction[0] = 0
+                    self.rect = self.rect.move(-self.speed, 0)
         if keys[pygame.K_s]:
             self.rect = self.rect.move(0, self.speed)
             self.moving = True
             self.moving_direction[1] = -1
             self.facing = 'south'
-            # self.interact_rect = self.interact_rect.move(0, self.speed)
             if pygame.sprite.spritecollideany(self, wall_group):
-                self.rect = self.rect.move(0, -self.speed)
-                self.moving = False
-                self.moving_direction[1] = 0
-                # self.interact_rect = self.interact_rect.move(0, -self.speed)
-
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.rect = self.rect.move(0, -self.speed)
+                    self.moving = False
+                    self.moving_direction[1] = 0
         if keys[pygame.K_a]:
             self.rect = self.rect.move(-self.speed, 0)
             self.moving = True
             self.moving_direction[0] = -1
             self.facing = 'west'
-            # self.interact_rect = self.interact_rect.move(-self.speed, 0)
             if pygame.sprite.spritecollideany(self, wall_group):
-                self.moving = False
-                self.moving_direction[0] = 0
-                self.rect = self.rect.move(self.speed, 0)
-                # self.interact_rect = self.interact_rect.move(self.speed, 0)
-
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.moving = False
+                    self.moving_direction[0] = 0
+                    self.rect = self.rect.move(self.speed, 0)
         self.interact_rect = pygame.Rect(self.rect.x + self.rect.width / 2 - self.interact_range,
                                          self.rect.y + self.rect.height / 2 - self.interact_range,
                                          self.interact_range * 2, self.interact_range * 2)
@@ -593,16 +634,20 @@ class Player(pygame.sprite.Sprite):
                 self.facing = 'north' if vy < 0 and abs(vy) > abs(vx) else 'south' if vy > 0 and abs(vy) > abs(vx) \
                     else 'east' if vx > 0 and abs(vx) > abs(vy) else 'west'
 
-        # Проверка столкновения с вражеской пулей
-        if pygame.sprite.spritecollideany(self, enemy_bullet_group):
-            pygame.sprite.spritecollide(self, enemy_bullet_group, True)
-            self.HP -= 10
-            if self.HP <= 0:
-                lose_screen()
-
         # Обновление изображения
-        self.image = pygame.transform.scale(load_image(self.images.get(self.facing), True), (128, 128))
+        if self.moving:
+            self.walk_frame_change_timer += 1
+            if self.walk_frame_change_timer >= 7:
+                self.walk_frame_change_timer = 0
+                self.current_frame += 1
+                if self.current_frame > 3:
+                    self.current_frame = 0
+        else:
+            self.current_frame = 0
+        self.image = self.frames.get(self.facing)[self.current_frame]
+        self.mask = pygame.mask.from_surface(self.image)
 
+        # Предметы в руках
         weapon1 = self.inventory.get_equipment('weapon1')
         if self.weapon1 is not None:
             self.weapon1.kill()
@@ -610,30 +655,55 @@ class Player(pygame.sprite.Sprite):
             self.weapon1 = weapon1.generate_sprite(self.rect.x + 50, self.rect.y, in_inventory=False)
             self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
             self.weapon1.rect = self.weapon1.image.get_rect()
-            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 75, self.rect.y + 50
-
         weapon2 = self.inventory.get_equipment('weapon2')
         if self.weapon2 is not None:
             self.weapon2.kill()
         if weapon2 is not None:
             self.weapon2 = weapon1.generate_sprite(self.rect.x - 50, self.rect.y, in_inventory=False)
+            self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
+            self.weapon1.rect = self.weapon1.image.get_rect()
             self.weapon2.rect.x, weapon2.rect.y = self.rect.x - 50, self.rect.y
+        if self.facing == 'west':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
+            self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
+            self.weapon1.move_to_layer(layer4)
+        elif self.facing == 'east':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
+            self.weapon1.move_to_layer(layer4)
+        elif self.facing == 'north':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
+            self.weapon1.move_to_layer(layer3)
+        elif self.facing == 'south':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x, self.rect.y + 50
+            self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
+            self.weapon1.move_to_layer(layer4)
+
+        # Проверка столкновения с вражеской пулей
+        if pygame.sprite.spritecollideany(self, enemy_bullet_group):
+            bullets = pygame.sprite.spritecollide(self, enemy_bullet_group, False)
+            for bullet in bullets:
+                if pygame.sprite.collide_mask(self, bullet):
+                    self.HP -= bullet.damage
+                    bullet.kill()
+
+        if self.HP <= 0:
+            lose_screen()
 
 
 class EnemyBullet(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y, vx, vy):
-        super().__init__(all_sprites, enemy_bullet_group)
+        super().__init__(all_sprites, enemy_bullet_group, layer4)
         self.press_allowed = True
         self.image = pygame.transform.scale(load_image('potat.png', True), (75, 75))
         self.rect = self.image.get_rect()
         self.velocity = [vx, vy]
+        self.damage = 10
         self.rect.x, self.rect.y = pos_x, pos_y
+        self.mask = pygame.mask.from_surface(self.image)
 
     def update(self, *args, **kwargs):
         self.rect.x += self.velocity[0]
         self.rect.y += self.velocity[1]
-        if not self.rect.colliderect(screen_rect):
-            self.kill()
         if pygame.sprite.spritecollideany(self, player_bullet_group):
             pygame.sprite.spritecollide(self, player_bullet_group, True)
             create_particle(self.rect.x + 37.5, self.rect.y + 25)
@@ -643,34 +713,9 @@ class EnemyBullet(pygame.sprite.Sprite):
             self.kill()
 
 
-class PlayerBullet(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, vx, vy, sin, cos):
-        super().__init__(all_sprites, player_bullet_group)
-        self.press_allowed = True
-        self.image = pygame.transform.scale(load_image('items\\bullets\\arrow1.png', True), (39, 11))
-        angle = math.acos(cos) * 180 / math.pi if sin > 0 else 360 - math.acos(cos) * 180 / math.pi
-        self.image = pygame.transform.rotate(self.image, -angle)
-        self.rect = self.image.get_rect()
-        self.velocity = [vx, vy]
-        self.rect.x, self.rect.y = pos_x, pos_y
-
-    def update(self, *args, **kwargs):
-        for _ in range(random.randint(1, 3)):
-            BulletParticle((
-                self.rect.x + self.rect.width / 2 + random.randint(-5, 5),
-                self.rect.y + self.rect.height / 2 + random.randint(-5, 5)))
-        self.rect.x += self.velocity[0]
-        self.rect.y += self.velocity[1]
-        if not self.rect.colliderect(screen_rect):
-            self.kill()
-        if pygame.sprite.spritecollideany(self, wall_group):
-            create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
-            self.kill()
-
-
 class Bullet(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y, vx, vy, sin, cos, parent, is_player=True):
-        super().__init__(all_sprites)
+        super().__init__(all_sprites, layer4)
         if is_player:
             self.add(player_bullet_group)
         else:
@@ -692,7 +737,7 @@ class Bullet(pygame.sprite.Sprite):
         self.image = pygame.transform.rotate(self.image, -angle)
 
         self.rect = self.image.get_rect()
-        self.rect.x, self.rect.y = pos_x, pos_y
+        self.rect.x, self.rect.y = pos_x, pos_y - self.rect.height / 2
 
         self.velocity = [vx, vy]
         self.particles = eval(str(self.particles))
@@ -718,26 +763,27 @@ class Bullet(pygame.sprite.Sprite):
 
 class Boss(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
-        super().__init__(boss_group, all_sprites)
-        self.image = load_image('cheems.png', True)
+        super().__init__(boss_group, all_sprites, layer4)
+        self.image = load_image('ВРАГ.png', True)
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * (pos_y - 2))
-        self.HP = 15
+        self.HP = 300
         self.bars = []
-        self.bars.append(Bar(self, 15, 15, 'red'))
+        self.bars.append(Bar(self, self.HP, self.HP, 'red', 300, 30))
 
     def refresh_bar(self, value_type):
         if value_type == 'HP':
             return self.HP
 
     def update(self, *args, **kwargs):
-        if random.randint(0, 100) > self.HP * 3 + 45:
+        if random.randint(0, 100) > 90:
             EnemyBullet(self.rect.x + 50, self.rect.y + 50, *random.choices((-5, -3, -2, -1, 1, 2, 3, 5), k=2))
         if pygame.sprite.spritecollideany(self, player_bullet_group):
-            pygame.sprite.spritecollide(self, player_bullet_group, True)
-            self.HP -= 1
+            bullets = pygame.sprite.spritecollide(self, player_bullet_group, True)
+            for bullet in bullets:
+                self.HP -= bullet.damage
             print(f'Boss HP: {self.HP}')
-            if not self.HP:
+            if self.HP <= 0:
                 create_particle(self.rect.x + 25, self.rect.y + 12.5)
                 create_particle(self.rect.x + 50, self.rect.y + 25)
                 create_particle(self.rect.x + 25, self.rect.y + 37.5)
@@ -771,7 +817,7 @@ class Bar(pygame.sprite.Sprite):
             self.movable = False
             self.add(gui_group)
         else:
-            self.add(all_sprites, bar_group)
+            self.add(all_sprites, bar_group, layer5)
             self.movable = True
 
         self.color = color
@@ -803,7 +849,7 @@ class Bar(pygame.sprite.Sprite):
 
 class Chest(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y, chest_state='closed', chest_contains=None):
-        super().__init__(wall_group, all_sprites)
+        super().__init__(wall_group, all_sprites, layer2)
         if chest_state == 'closed':
             self.image = load_image(f'chest1_closed.png', True)
         elif chest_state == 'opened':
@@ -870,6 +916,16 @@ class Inventory:
     def get_equipment(self, key):
         return self.equipment.get(key)
 
+    def equip(self, item):
+        if type(item) in (RangedWeapon, Armor):
+            if self.equipment[item.element] is not None:
+                self.items[self.items.index(item)] = self.equipment[item.element]
+            else:
+                self.items.remove(self.items[self.items.index(item)])
+            self.equipment[item.element] = item
+            return True
+        return False
+
     def __getitem__(self, item):
         return self.items[item]
 
@@ -908,13 +964,14 @@ class RangedWeapon:
 
 
 class RangedWeaponSprite(pygame.sprite.Sprite):
-    def __init__(self, image_path, x, y, parent, in_inv=True):
+    def __init__(self, image_path, x, y, parent, in_inv=True, layer=layer4):
         super().__init__()
 
+        self.lay = layer
         if in_inv:
             self.add(items_in_inventory)
         else:
-            self.add(all_sprites)
+            self.add(all_sprites, self.lay)
 
         self.img_path, self.parent = image_path, parent
 
@@ -926,7 +983,7 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
 
     def shoot(self, vx, vy):
         if eval(str(self.parent.bullet_count)) == 1:
-            Bullet(self.rect.x + self.rect.width, self.rect.y + self.rect.height / 2,
+            Bullet(self.rect.x + self.rect.width / 2, self.rect.y + self.rect.height / 2,
                    vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx, self.parent)
         else:
             count, angle = eval(self.parent.bullet_count)
@@ -934,6 +991,11 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
                 Bullet(self.rect.x + self.rect.width, self.rect.y + self.rect.height / 2,
                        vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx,
                        self.parent)
+
+    def move_to_layer(self, layer):
+        self.remove(self.lay)
+        self.lay = layer
+        self.add(self.lay)
 
 
 class Item:
@@ -963,7 +1025,7 @@ class ItemSprite(pygame.sprite.Sprite):
         if in_inv:
             self.add(items_in_inventory)
         else:
-            self.add(all_sprites)
+            self.add(all_sprites, layer3)
 
         self.name, self.description, self.img_path = name, description, image_path
 
@@ -1007,7 +1069,7 @@ class ArmorSprite(pygame.sprite.Sprite):
         if in_inv:
             self.add(items_in_inventory)
         else:
-            self.add(all_sprites)
+            self.add(all_sprites, layer3)
 
         self.name, self.description, self.element, self.armor_points, \
         self.img_path, self.features, self.cost, self.durability = \

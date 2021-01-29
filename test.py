@@ -18,7 +18,7 @@ wall_group = pygame.sprite.Group()
 
 
 def load_image(name, per_pixel_alpha=False, color_key=None):
-    fullname = os.path.join('textures', name)
+    fullname = os.path.join('data\\textures', name)
     try:
         image = pygame.image.load(fullname)
     except pygame.error as message:
@@ -39,7 +39,7 @@ def load_image(name, per_pixel_alpha=False, color_key=None):
 
 
 def load_level(filename):
-    filename = "levels/" + filename
+    filename = "data\\levels\\" + filename
     # читаем уровень, убирая символы перевода строки
     with open(filename, 'r') as mapFile:
         level_map = [line.strip() for line in mapFile]
@@ -74,13 +74,6 @@ def generate_level(level):
     return new_player, x, y
 
 
-tile_images = {
-    'wall': load_image('wall.png'),
-    # 'empty': pygame.Surface((100, 100))
-    'empty': ('grass1.png', 'grass2.png', 'grass3.png',)
-}
-
-
 class Tile(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
         super().__init__(tiles_group, all_sprites)
@@ -111,7 +104,8 @@ class Player(pygame.sprite.Sprite):
         super().__init__(player_group, all_sprites)
         self.speed = 10
 
-        self.image = pygame.transform.scale(load_image('baloon.png', True), (42, 94))
+        self.image = load_image('test_textures\\output_image1.png', color_key=-1)
+        self.image = pygame.transform.scale(self.image, (128, 128))
         self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
         self.mask = pygame.mask.from_surface(self.image)
 

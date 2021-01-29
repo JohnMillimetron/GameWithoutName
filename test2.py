@@ -1,6 +1,11 @@
-import sqlite3
 import os
 import pygame
+
+pygame.init()
+size = width, height = WIDTH, HEIGHT = 800, 600
+FPS = 60
+screen = pygame.display.set_mode(size)
+clock = pygame.time.Clock()
 
 all_sprites = pygame.sprite.Group()
 
@@ -26,33 +31,52 @@ def load_image(name, per_pixel_alpha=False, color_key=None):
     return image
 
 
-class RangedWeapon:
-    def __init__(self, *arg):
-        con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
-        cur = con.cursor()
-        if type(arg[0]) == int:
-            data = cur.execute(f"""SELECT * FROM ranged_weapons
-                                   WHERE id = {arg[0]}""").fetchall()
-        elif type(arg[0]) == str:
-            data = cur.execute(f"""SELECT name, description, damage, reload, durability, rareness, image_path
-                                   FROM ranged_weapons
-                                   WHERE name = '{arg[0]}'""").fetchall()
-        self.name, self.description, self.damage, self.reload_time, \
-        self.durability, self.rareness, self.img_path = data[0]
+bI = pygame.transform.scale(load_image('player\\player1_south.png', True), (256, 256))
+bI_rect = bI.get_rect()
 
-        print(self.name, self.description, self.damage, self.reload_time,
-              self.durability, self.rareness, self.img_path, sep='\n', end='\n\n')
+base = load_image('test_textures\\base1.png', True)
+base_rect = base.get_rect()
+jacket = load_image('test_textures\\jacket2.png', True)
+jacket_rect = jacket.get_rect()
+pants = load_image('test_textures\\pants1.png', True)
+pants_rect = pants.get_rect()
+boots = load_image('test_textures\\boots1.png', True)
+boots_rect = boots.get_rect()
+hat = load_image('test_textures\\hat1.png', True)
+hat_rect = hat.get_rect()
 
+player_image = pygame.Surface((128, 128))
+player_image.fill('#ABCDEF')
+player_image.blit(base, (0, 0))
+player_image.blit(hat, (0, 0))
+player_image.blit(jacket, (0, 52))
+player_image.blit(pants, (0, 96))
+player_image.blit(boots, (0, 116))
+player_image = pygame.transform.scale(player_image, (256, 256))
 
-class RangedWeaponSprite(pygame.sprite.Sprite):
-    def __init__(self, name, description, damage, reload, durability, rareness, image_path):
-        super().__init__(all_sprites)
-        self.name, self.description, self.damage, self.reload_time, \
-            self.durability, self.rareness, self.img_path = \
-            name, description, damage, reload, durability, rareness, image_path
+pygame.image.save(player_image, 'data\\textures\\test_textures\\output_image1.png')
 
-        self.image = pygame.transform.scale(load_image(self.img_path, True), (100, 100))
-        self.rect = self.image.get_rect()
+running = True
+while running:
+    keys = pygame.key.get_pressed()
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
 
+    screen.fill(pygame.Color("#AAAAAA"))
 
-RangedWeapon('Старый лук')
+    # screen.blit(base, (300, 100))
+    # screen.blit(hat, (300, 88))
+    # screen.blit(jacket, (300, 148))
+    # screen.blit(pants, (300, 148 + jacket_rect.height))
+    # screen.blit(boots, (300, 148 + jacket_rect.height + pants_rect.height))
+
+    screen.blit(player_image, (100, 100))
+
+    screen.blit(bI, (300, 116))
+
+    all_sprites.draw(screen)
+    all_sprites.update(keys=keys)
+
+    pygame.display.flip()
+    clock.tick(FPS)
