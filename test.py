@@ -103,11 +103,22 @@ class Player(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(player_group, all_sprites)
         self.speed = 10
+        self.frames = {'south': [],
+                       'north': [],
+                       'east': [],
+                       'west': []}
 
-        self.image = load_image('test_textures\\output_image1.png', color_key=-1)
-        self.image = pygame.transform.scale(self.image, (128, 128))
+        self.cut_sheet(load_image('player\\output_image1.png', True, color_key=-1), 4, 4)
+        self.image = self.frames.get('south')[0]
         self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
         self.mask = pygame.mask.from_surface(self.image)
+
+    def cut_sheet(self, sheet, columns, rows):
+        for j in range(rows):
+            names = ('south', 'north', 'west', 'east')
+            for i in range(columns):
+                frame_location = (128 * i, 144 * j)
+                self.frames[names[j]].append(sheet.subsurface(pygame.Rect(frame_location, (128, 144))))
 
     def update(self, *args):
         keys = pygame.key.get_pressed()

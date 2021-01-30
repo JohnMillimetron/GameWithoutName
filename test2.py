@@ -34,25 +34,24 @@ def load_image(name, per_pixel_alpha=False, color_key=None):
 bI = pygame.transform.scale(load_image('player\\player1_south.png', True), (256, 256))
 bI_rect = bI.get_rect()
 
-base = load_image('test_textures\\base1.png', True)
+base = load_image('test_textures\\base1_sheet.png', True)
 base_rect = base.get_rect()
-jacket = load_image('test_textures\\jacket2.png', True)
+jacket = load_image('test_textures\\jacket1_sheet.png', True)
 jacket_rect = jacket.get_rect()
-pants = load_image('test_textures\\pants1.png', True)
+pants = load_image('test_textures\\pants1_sheet.png', True)
 pants_rect = pants.get_rect()
-boots = load_image('test_textures\\boots1.png', True)
+boots = load_image('test_textures\\boots1_sheet.png', True)
 boots_rect = boots.get_rect()
-hat = load_image('test_textures\\hat1.png', True)
+hat = load_image('test_textures\\hat1_sheet.png', True)
 hat_rect = hat.get_rect()
 
-player_image = pygame.Surface((128, 128))
-player_image.fill('#ABCDEF')
+player_image = pygame.Surface((base_rect.width, base_rect.height))
+player_image.fill('#CDECDC')
 player_image.blit(base, (0, 0))
 player_image.blit(hat, (0, 0))
-player_image.blit(jacket, (0, 52))
-player_image.blit(pants, (0, 96))
-player_image.blit(boots, (0, 116))
-player_image = pygame.transform.scale(player_image, (256, 256))
+player_image.blit(jacket, (0, 0))
+player_image.blit(pants, (0, 0))
+player_image.blit(boots, (0, 0))
 
 pygame.image.save(player_image, 'data\\textures\\test_textures\\output_image1.png')
 
@@ -71,9 +70,9 @@ while running:
     # screen.blit(pants, (300, 148 + jacket_rect.height))
     # screen.blit(boots, (300, 148 + jacket_rect.height + pants_rect.height))
 
-    screen.blit(player_image, (100, 100))
+    screen.blit(player_image, (0, 0))
 
-    screen.blit(bI, (300, 116))
+    # screen.blit(bI, (300, 116))
 
     all_sprites.draw(screen)
     all_sprites.update(keys=keys)

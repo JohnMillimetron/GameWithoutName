@@ -234,7 +234,32 @@ def win_screen():
 
 
 def generate_player_image():
-    pass
+    base = load_image('test_textures\\base1_sheet.png', True)
+    base_rect = base.get_rect()
+
+    hat, jacket, pants, boots = None, None, None, None
+    if player.inventory.equipment.get('body') is not None:
+        jacket = load_image(f'items\\armor\\{player.inventory.equipment["body"].img_path}_sheet.png', True)
+    if player.inventory.equipment.get('legs') is not None:
+        pants = load_image(f'items\\armor\\{player.inventory.equipment["legs"].img_path}_sheet.png', True)
+    if player.inventory.equipment.get('feet') is not None:
+        boots = load_image(f'items\\armor\\{player.inventory.equipment["feet"].img_path}_sheet.png', True)
+    if player.inventory.equipment.get('head') is not None:
+        hat = load_image(f'items\\armor\\{player.inventory.equipment["head"].img_path}_sheet.png', True)
+
+    player_image = pygame.Surface((base_rect.width, base_rect.height))
+    player_image.fill('#CDECDC')
+    player_image.blit(base, (0, 0))
+    if hat:
+        player_image.blit(hat, (0, 0))
+    if jacket:
+        player_image.blit(jacket, (0, 0))
+    if pants:
+        player_image.blit(pants, (0, 0))
+    if boots:
+        player_image.blit(boots, (0, 0))
+
+    pygame.image.save(player_image, 'data\\textures\\player\\player_sheet.png')
 
 
 def open_inventory():
@@ -380,6 +405,13 @@ def level1():
     player.inventory.add_equipment(Armor('Старая куртка'))
     player.inventory.add_equipment(Armor(1))
     player.inventory.add_equipment(Armor(2))
+    player.inventory.add_equipment(Armor(3))
+    player.inventory.add(Armor(4))
+    player.inventory.add(Armor(5))
+    player.inventory.add(Armor(6))
+    player.inventory.add(Armor(7))
+
+    player.refresh_image()
 
     running = True
     while running:
@@ -511,13 +543,8 @@ class Player(pygame.sprite.Sprite):
                        'north': [],
                        'east': [],
                        'west': []}
-        self.images = {
-            'north': 'player\\player1_north.png',
-            'east': 'player\\player1_east.png',
-            'west': 'player\\player1_west.png',
-            'south': 'player\\player1_south.png',
-        }
-        self.cut_sheet(load_image('player\\player_sheet.png', True), 4, 4)
+
+        self.cut_sheet(load_image('player\\player_sheet.png', True, color_key=-1), 4, 4)
         self.image = self.frames.get('south')[0]
         self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
         self.mask = pygame.mask.from_surface(self.image)
@@ -541,17 +568,22 @@ class Player(pygame.sprite.Sprite):
         self.bars = []
 
     def cut_sheet(self, sheet, columns, rows):
+        self.frames = {'south': [], 'north': [], 'east': [], 'west': []}
         for j in range(rows):
             names = ('south', 'north', 'west', 'east')
             for i in range(columns):
-                frame_location = (128 * i, 128 * j)
-                self.frames[names[j]].append(sheet.subsurface(pygame.Rect(frame_location, (128, 128))))
+                frame_location = (128 * i, 144 * j)
+                self.frames[names[j]].append(sheet.subsurface(pygame.Rect(frame_location, (128, 144))))
 
     def refresh_bar(self, value_type):
         if value_type == 'HP':
             return self.HP
         elif value_type == 'reload':
             return self.reload if not self.can_shoot else self.reload_time
+
+    def refresh_image(self):
+        generate_player_image()
+        self.cut_sheet(load_image('player\\player_sheet.png', True, color_key=-1), 4, 4)
 
     def update(self, *args, **kwargs):
         keys = kwargs['keys'] if 'keys' in kwargs.keys() else pygame.key.get_pressed()
@@ -566,6 +598,7 @@ class Player(pygame.sprite.Sprite):
         if keys[pygame.K_e]:
             if self.can_open_inventory:
                 open_inventory()
+                self.refresh_image()
         else:
             self.can_open_inventory = True
 
@@ -1076,7 +1109,7 @@ class ArmorSprite(pygame.sprite.Sprite):
             name, description, element, armor_points, image_path, features, cost, durability
         self.max_durability = self.durability
 
-        self.image = pygame.transform.scale(load_image(self.img_path, True), (100, 100))
+        self.image = pygame.transform.scale(load_image(f'items\\armor\\{self.img_path}_sprite.png', True), (100, 100))
         self.rect = self.image.get_rect().move(x, y)
 
     def update(self, *args, **kwargs):
