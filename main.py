@@ -26,6 +26,7 @@ player_bullet_group = pygame.sprite.Group()
 bar_group = pygame.sprite.Group()
 gui_group = pygame.sprite.Group()
 items_in_inventory = pygame.sprite.Group()
+enemy_group = pygame.sprite.Group()
 
 layer1, layer2, layer3, layer4, layer5 = \
     pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group()
@@ -87,7 +88,11 @@ def generate_level(level):
             elif level[y][x] == 'c':
                 Tile('empty', x, y)
                 Chest(x, y, 'closed')
-    Boss(b_x, b_y)
+            elif level[y][x] == 'e':
+                Tile('empty', x, y)
+                Enemy(x, y)
+    global boss
+    boss = Boss(b_x, b_y)
     new_player = Player(p_x, p_y)
     # вернем игрока, а также размер поля в клетках
     return new_player, x, y
@@ -114,32 +119,32 @@ def rect_distance(rect1, rect2):
     top = y2b < y1
     bottom = y1b < y2
     if bottom and left:
-        print('bottom left')
-        return math.hypot(x2b - x1, y2 - y1b)
+        # print('bottom left')
+        return math.hypot(x2b - x1, y2 - y1b), 'bottom left'
     elif left and top:
-        print('top left')
-        return math.hypot(x2b - x1, y2b - y1)
+        # print('top left')
+        return math.hypot(x2b - x1, y2b - y1), 'top left'
     elif top and right:
-        print('top right')
-        return math.hypot(x2 - x1b, y2b - y1)
+        # print('top right')
+        return math.hypot(x2 - x1b, y2b - y1), 'top right'
     elif right and bottom:
-        print('bottom right')
-        return math.hypot(x2 - x1b, y2 - y1b)
+        # print('bottom right')
+        return math.hypot(x2 - x1b, y2 - y1b), 'bottom right'
     elif left:
-        print('left')
-        return x1 - x2b
+        # print('left')
+        return x1 - x2b, 'left'
     elif right:
-        print('right')
-        return x2 - x1b
+        # print('right')
+        return x2 - x1b, 'right'
     elif top:
-        print('top')
-        return y1 - y2b
+        # print('top')
+        return y1 - y2b, 'top'
     elif bottom:
-        print('bottom')
-        return y2 - y1b
+        # print('bottom')
+        return y2 - y1b, 'bottom'
     else:  # rectangles intersect
-        print('intersection')
-        return 0.
+        # print('intersection')
+        return 0, 'intersection'
 
 
 def start_screen():
@@ -424,6 +429,13 @@ def level1():
 
         screen.fill(pygame.Color("#AAAAAA"))
 
+        layer1.draw(screen)
+        layer2.draw(screen)
+        layer3.draw(screen)
+        layer4.draw(screen)
+        layer5.draw(screen)
+        gui_group.draw(screen)
+
         font = pygame.font.SysFont('TimesNewRoman', 32)
         text = font.render(f"direction: {str(player.moving_direction)}", True, pygame.color.Color('black'))
         screen.blit(text, (20, 300))
@@ -431,13 +443,9 @@ def level1():
         screen.blit(text, (20, 330))
         text = font.render(f"HP: {player.HP}", True, pygame.color.Color('black'))
         screen.blit(text, (20, 360))
+        text = font.render(f"{rect_distance(boss.rect, player.rect)}", True, pygame.color.Color('black'))
+        screen.blit(text, (20, 390))
 
-        layer1.draw(screen)
-        layer2.draw(screen)
-        layer3.draw(screen)
-        layer4.draw(screen)
-        layer5.draw(screen)
-        gui_group.draw(screen)
 
         camera.update(player)
         for sprite in all_sprites:
@@ -794,6 +802,200 @@ class Bullet(pygame.sprite.Sprite):
                 pass
 
 
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(all_sprites, layer4, enemy_group)
+        self.frames = {'south': [],
+                       'north': [],
+                       'east': [],
+                       'west': []}
+
+        self.cut_sheet(load_image('characters\\bandit1_sheet.png', True, color_key=-1), 4, 4)
+        self.image = self.frames.get('south')[0]
+        self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
+        self.mask = pygame.mask.from_surface(self.image)
+
+        self.current_frame, self.walk_frame_change_timer = 0, 0
+        self.HP, self.max_HP = 100, 100
+        self.reload, self.reload_time = 0, 15
+        self.can_shoot, self.can_open_inventory = True, True
+        self.speed = 8
+        self.moving, self.moving_direction, self.facing = False, [0, 0], 'south'
+        self.inventory = inventory
+        self.active = False
+        self.state_change_timer = 120
+
+        # Связанные спрайты предметов в руках
+        self.weapon1, self.weapon2 = None, None
+
+        self.interact_range = 150
+        self.player_see_range = 200
+        self.player_see_rect = pygame.Rect(self.rect.x + self.rect.width / 2 - self.player_see_range,
+                                           self.rect.y + self.rect.height / 2 - self.player_see_range,
+                                           self.player_see_range * 2, self.player_see_range * 2)
+        self.interact_rect = pygame.Rect(self.rect.x + self.rect.width / 2 - self.interact_range,
+                                         self.rect.y + self.rect.height / 2 - self.interact_range,
+                                         self.interact_range * 2, self.interact_range * 2)
+
+        self.bars = []
+        self.bars.append(Bar(self, self.HP, self.max_HP, 'red', 180, 25))
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.frames = {'south': [], 'north': [], 'east': [], 'west': []}
+        for j in range(rows):
+            names = ('south', 'north', 'west', 'east')
+            for i in range(columns):
+                frame_location = (128 * i, 144 * j)
+                self.frames[names[j]].append(sheet.subsurface(pygame.Rect(frame_location, (128, 144))))
+
+    def refresh_bar(self, value_type):
+        if value_type == 'HP':
+            return self.HP
+        elif value_type == 'reload':
+            return self.reload if not self.can_shoot else self.reload_time
+
+    def update(self, *args, **kwargs):
+        # keys = kwargs['keys'] if 'keys' in kwargs.keys() else pygame.key.get_pressed()
+
+        # Проверка перезарядки
+        self.reload += 1 if not self.can_shoot else 0
+        if self.reload >= self.reload_time:
+            self.can_shoot = True
+            self.reload = 0
+
+        distance_to_player, player_position = rect_distance(self.rect, player.rect)
+        if distance_to_player <= self.player_see_range:
+            self.active = True
+            self.speed = 7
+        else:
+            self.active = False
+            self.speed = 4
+
+        if not self.active:
+            self.state_change_timer -= 1
+            if not self.state_change_timer:
+                self.state_change_timer = 90
+                self.moving = random.randint(0, 100) > 50
+                if self.moving:
+                    self.moving_direction = [random.randint(-1, 1), random.randint(-1, 1)]
+                    if self.moving_direction[0] == 0 and self.moving_direction[1] == 0:
+                        self.moving = False
+            if self.moving:
+                if self.moving_direction[0] == 1 and self.moving_direction[1] == 0:
+                    self.rect = self.rect.move(self.speed, 0)
+                    self.facing = 'east'
+                    if pygame.sprite.spritecollideany(self, wall_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            self.moving = False
+                            self.moving_direction[0] = 0
+                            self.rect = self.rect.move(-self.speed, 0)
+                if self.moving_direction[0] == -1 and self.moving_direction[1] == 0:
+                    self.rect = self.rect.move(-self.speed, 0)
+                    self.facing = 'west'
+                    if pygame.sprite.spritecollideany(self, wall_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            self.moving = False
+                            self.moving_direction[0] = 0
+                            self.rect = self.rect.move(self.speed, 0)
+                if self.moving_direction[0] == 0 and self.moving_direction[1] == 1:
+                    self.rect = self.rect.move(0, self.speed)
+                    self.facing = 'south'
+                    if pygame.sprite.spritecollideany(self, wall_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            self.rect = self.rect.move(0, -self.speed)
+                            self.moving = False
+                            self.moving_direction[1] = 0
+                if self.moving_direction[0] == 0 and self.moving_direction[1] == -1:
+                    self.rect = self.rect.move(0, -self.speed)
+                    self.facing = 'north'
+                    if pygame.sprite.spritecollideany(self, wall_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            self.moving = False
+                            self.moving_direction[1] = 0
+                            self.rect = self.rect.move(0, self.speed)
+
+        font = pygame.font.SysFont('TimesNewRoman', 32)
+        text = font.render(f"{self.moving}, {self.moving_direction}", True, pygame.color.Color('black'))
+        screen.blit(text, (20, 420))
+
+        # Обработка событий: выстрел
+        # if 'event' in kwargs.keys():
+        #     if kwargs['event'].type == pygame.MOUSEBUTTONDOWN and self.can_shoot and self.weapon1 is not None:
+        #         bullet_direction_vector = [kwargs['event'].pos[0] - (self.rect.x + 37.5),
+        #                                    kwargs['event'].pos[1] - (self.rect.y + 37.5)]
+        #         vx = bullet_direction_vector[0] \
+        #              / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
+        #         vy = bullet_direction_vector[1] \
+        #              / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
+        #
+        #         self.weapon1.shoot(vx, vy)
+        #         self.can_shoot = False
+        #         self.facing = 'north' if vy < 0 and abs(vy) > abs(vx) else 'south' if vy > 0 and abs(vy) > abs(vx) \
+        #             else 'east' if vx > 0 and abs(vx) > abs(vy) else 'west'
+
+        # Обновление изображения
+
+        if self.moving:
+            self.walk_frame_change_timer += 1
+            if self.walk_frame_change_timer >= 7:
+                self.walk_frame_change_timer = 0
+                self.current_frame += 1
+                if self.current_frame > 3:
+                    self.current_frame = 0
+        else:
+            self.current_frame = 0
+        self.image = self.frames.get(self.facing)[self.current_frame]
+        self.mask = pygame.mask.from_surface(self.image)
+
+        # # Предметы в руках
+        # weapon1 = self.inventory.get_equipment('weapon1')
+        # if self.weapon1 is not None:
+        #     self.weapon1.kill()
+        # if weapon1 is not None:
+        #     self.weapon1 = weapon1.generate_sprite(self.rect.x + 50, self.rect.y, in_inventory=False)
+        #     self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
+        #     self.weapon1.rect = self.weapon1.image.get_rect()
+        # weapon2 = self.inventory.get_equipment('weapon2')
+        # if self.weapon2 is not None:
+        #     self.weapon2.kill()
+        # if weapon2 is not None:
+        #     self.weapon2 = weapon1.generate_sprite(self.rect.x - 50, self.rect.y, in_inventory=False)
+        #     self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
+        #     self.weapon1.rect = self.weapon1.image.get_rect()
+        #     self.weapon2.rect.x, weapon2.rect.y = self.rect.x - 50, self.rect.y
+        # if self.facing == 'west':
+        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
+        #     self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
+        #     self.weapon1.move_to_layer(layer4)
+        # elif self.facing == 'east':
+        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
+        #     self.weapon1.move_to_layer(layer4)
+        # elif self.facing == 'north':
+        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
+        #     self.weapon1.move_to_layer(layer3)
+        # elif self.facing == 'south':
+        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x, self.rect.y + 50
+        #     self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
+        #     self.weapon1.move_to_layer(layer4)
+
+        # Проверка столкновения с пулей игрока
+        if pygame.sprite.spritecollideany(self, player_bullet_group):
+            bullets = pygame.sprite.spritecollide(self, player_bullet_group, False)
+            for bullet in bullets:
+                if pygame.sprite.collide_mask(self, bullet):
+                    self.HP -= bullet.damage
+                    bullet.kill()
+
+        if self.HP <= 0:
+            for bar in self.bars:
+                bar.kill()
+            self.kill()
+
+
 class Boss(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(boss_group, all_sprites, layer4)
@@ -988,6 +1190,7 @@ class RangedWeapon:
         self.name, self.description, self.damage, self.reload_time, \
         self.durability, self.rareness, self.img_path, self.cost, \
         self.bullet_speed, self.bullet_id, self.bullet_count = data[0]
+        self.img_path = os.path.join('items', 'ranged_weapons', self.img_path)
 
         self.max_durability = self.durability
         self.element = 'weapon1'
@@ -1045,6 +1248,7 @@ class Item:
                                    WHERE name = '{arg[0]}'""").fetchall()
         con.close()
         self.name, self.description, self.img_path, self.cost = data[0]
+        self.img_path = os.path.join('items', 'items', self.img_path)
 
     def generate_sprite(self, x, y, in_inventory=True):
         return ItemSprite(self.name, self.description, self.img_path, self.cost, x, y,
@@ -1086,6 +1290,7 @@ class Armor:
         self.name, self.description, self.element, self.armor_points, \
         self.img_path, self.features, self.cost, self.durability = data[0]
         con.close()
+        self.img_path = os.path.join(self.element, self.img_path)
         self.max_durability = self.durability
 
     def generate_sprite(self, x, y, in_inventory=True):
