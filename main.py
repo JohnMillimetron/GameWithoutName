@@ -12,6 +12,7 @@ tile_width = tile_height = 100
 size = width, height = WIDTH, HEIGHT
 screen = pygame.display.set_mode(size)
 screen_rect = (0, 0, width, height)
+pygame.display.toggle_fullscreen()
 
 pygame.init()
 
@@ -120,31 +121,31 @@ def rect_distance(rect1, rect2):
     bottom = y1b < y2
     if bottom and left:
         # print('bottom left')
-        return math.hypot(x2b - x1, y2 - y1b), 'bottom left'
+        return math.hypot(x2b - x1, y2 - y1b), [-1, 1]
     elif left and top:
         # print('top left')
-        return math.hypot(x2b - x1, y2b - y1), 'top left'
+        return math.hypot(x2b - x1, y2b - y1), [-1, -1]
     elif top and right:
         # print('top right')
-        return math.hypot(x2 - x1b, y2b - y1), 'top right'
+        return math.hypot(x2 - x1b, y2b - y1), [1, -1]
     elif right and bottom:
         # print('bottom right')
-        return math.hypot(x2 - x1b, y2 - y1b), 'bottom right'
+        return math.hypot(x2 - x1b, y2 - y1b), [1, 1]
     elif left:
         # print('left')
-        return x1 - x2b, 'left'
+        return x1 - x2b, [-1, 0]
     elif right:
         # print('right')
-        return x2 - x1b, 'right'
+        return x2 - x1b, [1, 0]
     elif top:
         # print('top')
-        return y1 - y2b, 'top'
+        return y1 - y2b, [0, -1]
     elif bottom:
         # print('bottom')
-        return y2 - y1b, 'bottom'
+        return y2 - y1b, [0, 1]
     else:  # rectangles intersect
         # print('intersection')
-        return 0, 'intersection'
+        return 0, [0, 0]
 
 
 def start_screen():
@@ -435,17 +436,6 @@ def level1():
         layer4.draw(screen)
         layer5.draw(screen)
         gui_group.draw(screen)
-
-        font = pygame.font.SysFont('TimesNewRoman', 32)
-        text = font.render(f"direction: {str(player.moving_direction)}", True, pygame.color.Color('black'))
-        screen.blit(text, (20, 300))
-        text = font.render(f"facing: {player.facing}", True, pygame.color.Color('black'))
-        screen.blit(text, (20, 330))
-        text = font.render(f"HP: {player.HP}", True, pygame.color.Color('black'))
-        screen.blit(text, (20, 360))
-        text = font.render(f"{rect_distance(boss.rect, player.rect)}", True, pygame.color.Color('black'))
-        screen.blit(text, (20, 390))
-
 
         camera.update(player)
         for sprite in all_sprites:
@@ -826,10 +816,12 @@ class Enemy(pygame.sprite.Sprite):
         self.state_change_timer = 120
 
         # Связанные спрайты предметов в руках
-        self.weapon1, self.weapon2 = None, None
+        self.weapon1_inv = RangedWeapon('Старый лук', is_player=False)
+        self.weapon1 = self.weapon1_inv.generate_sprite(self.rect.x + 50, self.rect.y, in_inventory=False)
 
         self.interact_range = 150
-        self.player_see_range = 200
+        self.player_see_range, self.player_unsee_range = 300, 500
+        self.shoot_range = 300
         self.player_see_rect = pygame.Rect(self.rect.x + self.rect.width / 2 - self.player_see_range,
                                            self.rect.y + self.rect.height / 2 - self.player_see_range,
                                            self.player_see_range * 2, self.player_see_range * 2)
@@ -866,10 +858,10 @@ class Enemy(pygame.sprite.Sprite):
         distance_to_player, player_position = rect_distance(self.rect, player.rect)
         if distance_to_player <= self.player_see_range:
             self.active = True
-            self.speed = 7
-        else:
+            self.speed = 3
+        if distance_to_player >= self.player_unsee_range:
             self.active = False
-            self.speed = 4
+            self.speed = 2
 
         if not self.active:
             self.state_change_timer -= 1
@@ -878,49 +870,67 @@ class Enemy(pygame.sprite.Sprite):
                 self.moving = random.randint(0, 100) > 50
                 if self.moving:
                     self.moving_direction = [random.randint(-1, 1), random.randint(-1, 1)]
-                    if self.moving_direction[0] == 0 and self.moving_direction[1] == 0:
+                    if not self.moving_direction[0] and not self.moving_direction[1]:
                         self.moving = False
-            if self.moving:
-                if self.moving_direction[0] == 1 and self.moving_direction[1] == 0:
-                    self.rect = self.rect.move(self.speed, 0)
-                    self.facing = 'east'
-                    if pygame.sprite.spritecollideany(self, wall_group):
-                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
-                                   pygame.sprite.spritecollide(self, wall_group, False))):
-                            self.moving = False
-                            self.moving_direction[0] = 0
-                            self.rect = self.rect.move(-self.speed, 0)
-                if self.moving_direction[0] == -1 and self.moving_direction[1] == 0:
-                    self.rect = self.rect.move(-self.speed, 0)
-                    self.facing = 'west'
-                    if pygame.sprite.spritecollideany(self, wall_group):
-                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
-                                   pygame.sprite.spritecollide(self, wall_group, False))):
-                            self.moving = False
-                            self.moving_direction[0] = 0
-                            self.rect = self.rect.move(self.speed, 0)
-                if self.moving_direction[0] == 0 and self.moving_direction[1] == 1:
-                    self.rect = self.rect.move(0, self.speed)
-                    self.facing = 'south'
-                    if pygame.sprite.spritecollideany(self, wall_group):
-                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
-                                   pygame.sprite.spritecollide(self, wall_group, False))):
-                            self.rect = self.rect.move(0, -self.speed)
-                            self.moving = False
-                            self.moving_direction[1] = 0
-                if self.moving_direction[0] == 0 and self.moving_direction[1] == -1:
-                    self.rect = self.rect.move(0, -self.speed)
-                    self.facing = 'north'
-                    if pygame.sprite.spritecollideany(self, wall_group):
-                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
-                                   pygame.sprite.spritecollide(self, wall_group, False))):
-                            self.moving = False
-                            self.moving_direction[1] = 0
-                            self.rect = self.rect.move(0, self.speed)
+        else:
+            if distance_to_player > self.shoot_range:
+                self.moving = True
+                self.moving_direction = player_position
+            else:
+                self.moving = False
+                if random.randint(0, 100) > 98:
+                    bullet_direction_vector = [(player.rect.x + player.rect.width) - self.weapon1.rect.x,
+                                               (player.rect.y + player.rect.width) - self.weapon1.rect.y]
+                    vx = bullet_direction_vector[0] \
+                         / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
+                    vy = bullet_direction_vector[1] \
+                         / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
+                    self.weapon1.shoot(vx, vy)
+
+        if self.moving:
+            if self.moving_direction[0] == 1:
+                self.rect = self.rect.move(self.speed, 0)
+                self.facing = 'east'
+                if pygame.sprite.spritecollideany(self, wall_group):
+                    if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                               pygame.sprite.spritecollide(self, wall_group, False))):
+                        self.moving = False
+                        self.moving_direction[0] = 0
+                        self.rect = self.rect.move(-self.speed, 0)
+            elif self.moving_direction[0] == -1:
+                self.rect = self.rect.move(-self.speed, 0)
+                self.facing = 'west'
+                if pygame.sprite.spritecollideany(self, wall_group):
+                    if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                               pygame.sprite.spritecollide(self, wall_group, False))):
+                        self.moving = False
+                        self.moving_direction[0] = 0
+                        self.rect = self.rect.move(self.speed, 0)
+            if self.moving_direction[1] == 1:
+                self.rect = self.rect.move(0, self.speed)
+                self.facing = 'south'
+                if pygame.sprite.spritecollideany(self, wall_group):
+                    if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                               pygame.sprite.spritecollide(self, wall_group, False))):
+                        self.rect = self.rect.move(0, -self.speed)
+                        self.moving = False
+                        self.moving_direction[1] = 0
+            elif self.moving_direction[1] == -1:
+                self.rect = self.rect.move(0, -self.speed)
+                self.facing = 'north'
+                if pygame.sprite.spritecollideany(self, wall_group):
+                    if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                               pygame.sprite.spritecollide(self, wall_group, False))):
+                        self.moving = False
+                        self.moving_direction[1] = 0
+                        self.rect = self.rect.move(0, self.speed)
 
         font = pygame.font.SysFont('TimesNewRoman', 32)
-        text = font.render(f"{self.moving}, {self.moving_direction}", True, pygame.color.Color('black'))
+        text = font.render(f"{self.moving}, {self.moving_direction}, {self.facing}", True, pygame.color.Color('black'))
         screen.blit(text, (20, 420))
+        font = pygame.font.SysFont('TimesNewRoman', 28)
+        text = font.render(f"{rect_distance(self.rect, player.rect)}", True, pygame.color.Color('black'))
+        screen.blit(text, (20, 390))
 
         # Обработка событий: выстрел
         # if 'event' in kwargs.keys():
@@ -951,14 +961,11 @@ class Enemy(pygame.sprite.Sprite):
         self.image = self.frames.get(self.facing)[self.current_frame]
         self.mask = pygame.mask.from_surface(self.image)
 
-        # # Предметы в руках
-        # weapon1 = self.inventory.get_equipment('weapon1')
-        # if self.weapon1 is not None:
-        #     self.weapon1.kill()
-        # if weapon1 is not None:
-        #     self.weapon1 = weapon1.generate_sprite(self.rect.x + 50, self.rect.y, in_inventory=False)
-        #     self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
-        #     self.weapon1.rect = self.weapon1.image.get_rect()
+        # Предметы в руках
+        self.weapon1.kill()
+        self.weapon1 = self.weapon1_inv.generate_sprite(self.rect.x + 50, self.rect.y, in_inventory=False)
+        self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
+        self.weapon1.rect = self.weapon1.image.get_rect()
         # weapon2 = self.inventory.get_equipment('weapon2')
         # if self.weapon2 is not None:
         #     self.weapon2.kill()
@@ -967,20 +974,20 @@ class Enemy(pygame.sprite.Sprite):
         #     self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
         #     self.weapon1.rect = self.weapon1.image.get_rect()
         #     self.weapon2.rect.x, weapon2.rect.y = self.rect.x - 50, self.rect.y
-        # if self.facing == 'west':
-        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
-        #     self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
-        #     self.weapon1.move_to_layer(layer4)
-        # elif self.facing == 'east':
-        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
-        #     self.weapon1.move_to_layer(layer4)
-        # elif self.facing == 'north':
-        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
-        #     self.weapon1.move_to_layer(layer3)
-        # elif self.facing == 'south':
-        #     self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x, self.rect.y + 50
-        #     self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
-        #     self.weapon1.move_to_layer(layer4)
+        if self.facing == 'west':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
+            self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
+            self.weapon1.move_to_layer(layer4)
+        elif self.facing == 'east':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
+            self.weapon1.move_to_layer(layer4)
+        elif self.facing == 'north':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
+            self.weapon1.move_to_layer(layer3)
+        elif self.facing == 'south':
+            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x, self.rect.y + 50
+            self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
+            self.weapon1.move_to_layer(layer4)
 
         # Проверка столкновения с пулей игрока
         if pygame.sprite.spritecollideany(self, player_bullet_group):
@@ -1172,7 +1179,7 @@ class Inventory:
 
 
 class RangedWeapon:
-    def __init__(self, *arg):
+    def __init__(self, *arg, is_player=True):
         con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
         cur = con.cursor()
         if type(arg[0]) == int:
@@ -1192,15 +1199,16 @@ class RangedWeapon:
         self.bullet_speed, self.bullet_id, self.bullet_count = data[0]
         self.img_path = os.path.join('items', 'ranged_weapons', self.img_path)
 
+        self.is_player = is_player
         self.max_durability = self.durability
         self.element = 'weapon1'
 
     def generate_sprite(self, x, y, in_inventory=True):
-        return RangedWeaponSprite(self.img_path, x, y, parent=self, in_inv=in_inventory)
+        return RangedWeaponSprite(self.img_path, x, y, parent=self, in_inv=in_inventory, is_player=self.is_player)
 
 
 class RangedWeaponSprite(pygame.sprite.Sprite):
-    def __init__(self, image_path, x, y, parent, in_inv=True, layer=layer4):
+    def __init__(self, image_path, x, y, parent, in_inv=True, layer=layer4, is_player=True):
         super().__init__()
 
         self.lay = layer
@@ -1211,6 +1219,7 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
 
         self.img_path, self.parent = image_path, parent
 
+        self.is_player = is_player
         self.image = pygame.transform.scale(load_image(self.img_path, True), (100, 100))
         self.rect = self.image.get_rect().move(x, y)
 
@@ -1220,13 +1229,14 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
     def shoot(self, vx, vy):
         if eval(str(self.parent.bullet_count)) == 1:
             Bullet(self.rect.x + self.rect.width / 2, self.rect.y + self.rect.height / 2,
-                   vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx, self.parent)
+                   vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx, self.parent,
+                   is_player=self.is_player)
         else:
             count, angle = eval(self.parent.bullet_count)
             for i in range(count):
                 Bullet(self.rect.x + self.rect.width, self.rect.y + self.rect.height / 2,
                        vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx,
-                       self.parent)
+                       self.parent, is_player=self.is_player)
 
     def move_to_layer(self, layer):
         self.remove(self.lay)
