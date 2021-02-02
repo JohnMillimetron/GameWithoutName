@@ -99,10 +99,23 @@ def generate_level(level):
     return new_player, x, y
 
 
-def create_particle(x, y, count=30):
-    numbers = range(-5, 6)
-    for _ in range(count):
-        Particle((x, y), random.choice(numbers), random.choice(numbers))
+def create_particle(x, y, count=30, type='default'):
+    if type == 'default':
+        numbers = range(-5, 6)
+        for _ in range(count):
+            Particle((x, y), random.choice(numbers), random.choice(numbers))
+    elif type == 'expl':
+        ExplosionParticle((x, y))
+
+
+def explosion(x, y, r=200, damage=100, ptcls_count=1000):
+    for i in range(ptcls_count):
+        create_particle(x, y, type='expl')
+    for sprite in enemy_group:
+        if rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0] <= r:
+            sprite.damage(damage)
+    if rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0] <= r:
+        player.damage(damage)
 
 
 def terminate():
@@ -401,8 +414,8 @@ def open_inventory():
 
 
 def level1():
-    global player
-    player, level_x, level_y = generate_level(load_level('map.txt'))
+    global player, gui
+    player, level_x, level_y = generate_level(load_level('map2.txt'))
     camera = Camera()
     gui = Gui()
 
@@ -484,6 +497,29 @@ class Particle(pygame.sprite.Sprite):
             self.kill()
 
 
+class ExplosionParticle(pygame.sprite.Sprite):
+    def __init__(self, pos, color='red'):
+        super().__init__(all_sprites, layer4)
+        size = random.randint(1, 20)
+        self.image = pygame.Surface((size, size))
+        self.image.fill(pygame.Color(color))
+        self.image.set_alpha(random.randint(180, 201))
+        self.rect = self.image.get_rect()
+
+        self.velocity = [random.randint(-100, 100) / 10, random.randint(-100, 100) / 10]
+        self.rect.x, self.rect.y = pos
+        self.lifetime, self.lifetime_counter = random.randint(5, 45), 0
+
+    def update(self, *args, **kwargs):
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+        self.velocity[0] -= 0.2 if self.velocity[0] > 0 else -0.2
+        self.velocity[1] -= 0.2 if self.velocity[1] > 0 else -0.2
+        self.lifetime_counter += 1
+        if self.lifetime_counter == self.lifetime:
+            self.kill()
+
+
 class BulletParticle(pygame.sprite.Sprite):
     def __init__(self, pos):
         super().__init__(all_sprites, layer5)
@@ -548,9 +584,8 @@ class Player(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
 
         self.current_frame, self.walk_frame_change_timer = 0, 0
-        self.HP, self.max_HP = 100, 100
-        self.reload, self.reload_time = 0, 15
-        self.can_shoot, self.can_open_inventory = True, True
+        self.HP, self.max_HP = 300, 300
+        self.can_open_inventory = True
         self.speed = 8
         self.moving, self.moving_direction, self.facing = False, [0, 0], 'south'
         self.inventory = inventory
@@ -577,7 +612,9 @@ class Player(pygame.sprite.Sprite):
         if value_type == 'HP':
             return self.HP
         elif value_type == 'reload':
-            return self.reload if not self.can_shoot else self.reload_time
+            if self.weapon1 is not None:
+                return self.weapon1.parent.reload if not self.weapon1.parent.loaded else self.weapon1.parent.reload_time
+            return 0
 
     def refresh_image(self):
         generate_player_image()
@@ -587,10 +624,9 @@ class Player(pygame.sprite.Sprite):
         keys = kwargs['keys'] if 'keys' in kwargs.keys() else pygame.key.get_pressed()
 
         # Проверка перезарядки
-        self.reload += 1 if not self.can_shoot else 0
-        if self.reload >= self.reload_time:
-            self.can_shoot = True
-            self.reload = 0
+        if self.weapon1 is not None:
+            self.weapon1.parent.reloading()
+            gui.bars[1].set_max_value(self.weapon1.parent.reload_time)
 
         # Открытие инвентаря
         if keys[pygame.K_e]:
@@ -652,18 +688,20 @@ class Player(pygame.sprite.Sprite):
 
         # Обработка событий: выстрел
         if 'event' in kwargs.keys():
-            if kwargs['event'].type == pygame.MOUSEBUTTONDOWN and self.can_shoot and self.weapon1 is not None:
-                bullet_direction_vector = [kwargs['event'].pos[0] - (self.rect.x + 37.5),
-                                           kwargs['event'].pos[1] - (self.rect.y + 37.5)]
-                vx = bullet_direction_vector[0] \
-                     / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
-                vy = bullet_direction_vector[1] \
-                     / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
+            if kwargs['event'].type == pygame.MOUSEBUTTONDOWN:
+                if self.weapon1 is not None:
+                    if self.weapon1.parent.loaded:
+                        bullet_direction_vector = [kwargs['event'].pos[0] - (self.rect.x + 37.5),
+                                                   kwargs['event'].pos[1] - (self.rect.y + 37.5)]
+                        vx = bullet_direction_vector[0] \
+                             / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
+                        vy = bullet_direction_vector[1] \
+                             / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
 
-                self.weapon1.shoot(vx, vy)
-                self.can_shoot = False
-                self.facing = 'north' if vy < 0 and abs(vy) > abs(vx) else 'south' if vy > 0 and abs(vy) > abs(vx) \
-                    else 'east' if vx > 0 and abs(vx) > abs(vy) else 'west'
+                        self.weapon1.shoot(vx, vy)
+                        self.facing = 'north' if vy < 0 and abs(vy) > abs(vx) else \
+                            'south' if vy > 0 and abs(vy) > abs(vx) else \
+                                'east' if vx > 0 and abs(vx) > abs(vy) else 'west'
 
         # Обновление изображения
         if self.moving:
@@ -709,16 +747,11 @@ class Player(pygame.sprite.Sprite):
             self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
             self.weapon1.move_to_layer(layer4)
 
-        # Проверка столкновения с вражеской пулей
-        if pygame.sprite.spritecollideany(self, enemy_bullet_group):
-            bullets = pygame.sprite.spritecollide(self, enemy_bullet_group, False)
-            for bullet in bullets:
-                if pygame.sprite.collide_mask(self, bullet):
-                    self.HP -= bullet.damage
-                    bullet.kill()
-
         if self.HP <= 0:
             lose_screen()
+
+    def damage(self, damage):
+        self.HP -= damage
 
 
 class EnemyBullet(pygame.sprite.Sprite):
@@ -761,6 +794,8 @@ class Bullet(pygame.sprite.Sprite):
 
         self.type, self.explosion, self.particles, self.img_path = data[0]
         self.damage = parent.damage
+        self.is_player = is_player
+        self.explosion = eval(self.explosion)
 
         self.image = load_image(self.img_path, True)
 
@@ -789,7 +824,21 @@ class Bullet(pygame.sprite.Sprite):
             create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
             self.kill()
             if self.explosion:
-                pass
+                explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
+
+        if self.is_player:
+            if pygame.sprite.spritecollideany(self, enemy_group):
+                if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, enemy_group)):
+                    pygame.sprite.spritecollideany(self, enemy_group).damage(self.damage)
+                    if self.explosion:
+                        explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
+                    self.kill()
+        else:
+            if pygame.sprite.collide_mask(self, player):
+                player.damage(self.damage)
+                if self.explosion:
+                    explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
+                self.kill()
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -814,14 +863,16 @@ class Enemy(pygame.sprite.Sprite):
         self.inventory = inventory
         self.active = False
         self.state_change_timer = 120
+        self.inaccuracy = 150
+        self.shoot_speed = 98
 
         # Связанные спрайты предметов в руках
         self.weapon1_inv = RangedWeapon('Старый лук', is_player=False)
         self.weapon1 = self.weapon1_inv.generate_sprite(self.rect.x + 50, self.rect.y, in_inventory=False)
 
         self.interact_range = 150
-        self.player_see_range, self.player_unsee_range = 300, 500
-        self.shoot_range = 300
+        self.player_see_range, self.player_unsee_range = 500, 700
+        self.shoot_range = 500
         self.player_see_rect = pygame.Rect(self.rect.x + self.rect.width / 2 - self.player_see_range,
                                            self.rect.y + self.rect.height / 2 - self.player_see_range,
                                            self.player_see_range * 2, self.player_see_range * 2)
@@ -847,13 +898,9 @@ class Enemy(pygame.sprite.Sprite):
             return self.reload if not self.can_shoot else self.reload_time
 
     def update(self, *args, **kwargs):
-        # keys = kwargs['keys'] if 'keys' in kwargs.keys() else pygame.key.get_pressed()
-
-        # Проверка перезарядки
-        self.reload += 1 if not self.can_shoot else 0
-        if self.reload >= self.reload_time:
-            self.can_shoot = True
-            self.reload = 0
+        # nерезарядкa
+        if self.weapon1 is not None:
+            self.weapon1.parent.reloading()
 
         distance_to_player, player_position = rect_distance(self.rect, player.rect)
         if distance_to_player <= self.player_see_range:
@@ -878,9 +925,16 @@ class Enemy(pygame.sprite.Sprite):
                 self.moving_direction = player_position
             else:
                 self.moving = False
-                if random.randint(0, 100) > 98:
-                    bullet_direction_vector = [(player.rect.x + player.rect.width) - self.weapon1.rect.x,
-                                               (player.rect.y + player.rect.width) - self.weapon1.rect.y]
+                bullet_direction_vector = [(player.rect.x + player.rect.width) -
+                                           (self.weapon1.rect.x + self.weapon1.rect.width),
+                                           (player.rect.y + player.rect.height) -
+                                           (self.weapon1.rect.y + self.weapon1.rect.height)]
+                self.facing = 'south' if bullet_direction_vector[1] > 0 else \
+                    'north' if bullet_direction_vector[0] < 0 else \
+                        'east' if bullet_direction_vector[0] > 0 else 'west'
+                if self.weapon1.parent.loaded and random.randint(0, 100) > self.shoot_speed:
+                    bullet_direction_vector[0] += random.randint(-self.inaccuracy, self.inaccuracy)
+                    bullet_direction_vector[1] += random.randint(-self.inaccuracy, self.inaccuracy)
                     vx = bullet_direction_vector[0] \
                          / math.sqrt(bullet_direction_vector[0] ** 2 + bullet_direction_vector[1] ** 2)
                     vy = bullet_direction_vector[1] \
@@ -924,13 +978,6 @@ class Enemy(pygame.sprite.Sprite):
                         self.moving = False
                         self.moving_direction[1] = 0
                         self.rect = self.rect.move(0, self.speed)
-
-        font = pygame.font.SysFont('TimesNewRoman', 32)
-        text = font.render(f"{self.moving}, {self.moving_direction}, {self.facing}", True, pygame.color.Color('black'))
-        screen.blit(text, (20, 420))
-        font = pygame.font.SysFont('TimesNewRoman', 28)
-        text = font.render(f"{rect_distance(self.rect, player.rect)}", True, pygame.color.Color('black'))
-        screen.blit(text, (20, 390))
 
         # Обработка событий: выстрел
         # if 'event' in kwargs.keys():
@@ -989,27 +1036,24 @@ class Enemy(pygame.sprite.Sprite):
             self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
             self.weapon1.move_to_layer(layer4)
 
-        # Проверка столкновения с пулей игрока
-        if pygame.sprite.spritecollideany(self, player_bullet_group):
-            bullets = pygame.sprite.spritecollide(self, player_bullet_group, False)
-            for bullet in bullets:
-                if pygame.sprite.collide_mask(self, bullet):
-                    self.HP -= bullet.damage
-                    bullet.kill()
 
         if self.HP <= 0:
             for bar in self.bars:
                 bar.kill()
             self.kill()
+            self.weapon1.kill()
+
+    def damage(self, damage):
+        self.HP -= damage
 
 
 class Boss(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
-        super().__init__(boss_group, all_sprites, layer4)
+        super().__init__(boss_group, all_sprites, layer4, enemy_group)
         self.image = load_image('ВРАГ.png', True)
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * (pos_y - 2))
-        self.HP = 300
+        self.HP = 500
         self.bars = []
         self.bars.append(Bar(self, self.HP, self.HP, 'red', 300, 30))
 
@@ -1020,20 +1064,18 @@ class Boss(pygame.sprite.Sprite):
     def update(self, *args, **kwargs):
         if random.randint(0, 100) > 90:
             EnemyBullet(self.rect.x + 50, self.rect.y + 50, *random.choices((-5, -3, -2, -1, 1, 2, 3, 5), k=2))
-        if pygame.sprite.spritecollideany(self, player_bullet_group):
-            bullets = pygame.sprite.spritecollide(self, player_bullet_group, True)
-            for bullet in bullets:
-                self.HP -= bullet.damage
-            print(f'Boss HP: {self.HP}')
-            if self.HP <= 0:
-                create_particle(self.rect.x + 25, self.rect.y + 12.5)
-                create_particle(self.rect.x + 50, self.rect.y + 25)
-                create_particle(self.rect.x + 25, self.rect.y + 37.5)
-                create_particle(self.rect.x + 50, self.rect.y + 50)
-                create_particle(self.rect.x + 37.5, self.rect.y + 62.5)
-                self.kill()
-                for bar in self.bars:
-                    bar.kill()
+        if self.HP <= 0:
+            create_particle(self.rect.x + 25, self.rect.y + 12.5)
+            create_particle(self.rect.x + 50, self.rect.y + 25)
+            create_particle(self.rect.x + 25, self.rect.y + 37.5)
+            create_particle(self.rect.x + 50, self.rect.y + 50)
+            create_particle(self.rect.x + 37.5, self.rect.y + 62.5)
+            self.kill()
+            for bar in self.bars:
+                bar.kill()
+
+    def damage(self, damage):
+        self.HP -= damage
 
 
 class Camera:
@@ -1075,6 +1117,10 @@ class Bar(pygame.sprite.Sprite):
 
         if not self.movable:
             self.rect = self.rect.move(coords)
+
+    def set_max_value(self, value):
+        self.max_value = value
+        self.pixels_per_value = self.size_x / self.max_value
 
     def update(self, *args, **kwargs):
         if self.movable:
@@ -1131,7 +1177,7 @@ class Gui(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.bars = []
         self.bars.append(Bar(player, player.HP, player.max_HP, coords=(20, 20), size_x=300, size_y=40))
-        self.bars.append(Bar(player, player.reload, player.reload_time,
+        self.bars.append(Bar(player, 100, 100,
                              coords=(20, 75), size_x=300, size_y=40, value_type='reload', color='blue'))
 
     def update(self, *args, **kwargs):
@@ -1199,12 +1245,21 @@ class RangedWeapon:
         self.bullet_speed, self.bullet_id, self.bullet_count = data[0]
         self.img_path = os.path.join('items', 'ranged_weapons', self.img_path)
 
+        self.loaded = False
+        self.reload = 0
         self.is_player = is_player
         self.max_durability = self.durability
         self.element = 'weapon1'
 
     def generate_sprite(self, x, y, in_inventory=True):
         return RangedWeaponSprite(self.img_path, x, y, parent=self, in_inv=in_inventory, is_player=self.is_player)
+
+    def reloading(self):
+        if not self.loaded:
+            self.reload += 1
+            if self.reload >= self.reload_time:
+                self.reload = 0
+                self.loaded = True
 
 
 class RangedWeaponSprite(pygame.sprite.Sprite):
@@ -1237,6 +1292,7 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
                 Bullet(self.rect.x + self.rect.width, self.rect.y + self.rect.height / 2,
                        vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx,
                        self.parent, is_player=self.is_player)
+        self.parent.loaded = False
 
     def move_to_layer(self, layer):
         self.remove(self.lay)
