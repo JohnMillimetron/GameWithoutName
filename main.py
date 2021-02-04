@@ -85,17 +85,15 @@ def generate_level(level):
                 p_x, p_y = x, y
             elif level[y][x] == 'B':
                 Tile('empty', x, y)
-                b_x, b_y = x, y
+                global boss
+                boss = Boss(x, y)
             elif level[y][x] == 'c':
                 Tile('empty', x, y)
                 Chest(x, y, 'closed')
             elif level[y][x] == 'e':
                 Tile('empty', x, y)
-                Enemy(x, y)
-    global boss
-    boss = Boss(b_x, b_y)
+                Bandit(x, y)
     new_player = Player(p_x, p_y)
-    # вернем игрока, а также размер поля в клетках
     return new_player, x, y
 
 
@@ -108,14 +106,14 @@ def create_particle(x, y, count=30, type='default'):
         ExplosionParticle((x, y))
 
 
-def explosion(x, y, r=200, damage=100, ptcls_count=1000):
+def explosion(x, y, r=200, damage=100, ptcls_count=500):
     for i in range(ptcls_count):
-        create_particle(x, y, type='expl')
+        ExplosionParticle((x, y))
     for sprite in enemy_group:
         if rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0] <= r:
-            sprite.damage(damage)
+            sprite.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0])
     if rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0] <= r:
-        player.damage(damage)
+        player.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0])
 
 
 def terminate():
@@ -498,7 +496,7 @@ class Particle(pygame.sprite.Sprite):
 
 
 class ExplosionParticle(pygame.sprite.Sprite):
-    def __init__(self, pos, color='red'):
+    def __init__(self, pos, color='red', damage=1):
         super().__init__(all_sprites, layer4)
         size = random.randint(1, 20)
         self.image = pygame.Surface((size, size))
@@ -509,6 +507,7 @@ class ExplosionParticle(pygame.sprite.Sprite):
         self.velocity = [random.randint(-100, 100) / 10, random.randint(-100, 100) / 10]
         self.rect.x, self.rect.y = pos
         self.lifetime, self.lifetime_counter = random.randint(5, 45), 0
+        self.damage = damage
 
     def update(self, *args, **kwargs):
         self.rect.x += self.velocity[0]
@@ -518,6 +517,17 @@ class ExplosionParticle(pygame.sprite.Sprite):
         self.lifetime_counter += 1
         if self.lifetime_counter == self.lifetime:
             self.kill()
+        if self.lifetime_counter > 2:
+            if pygame.sprite.spritecollideany(self, wall_group):
+                self.kill()
+
+        # if pygame.sprite.spritecollideany(self, enemy_group):
+        #     if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, enemy_group)):
+        #         pygame.sprite.spritecollideany(self, enemy_group).damage(self.damage)
+        #         self.kill()
+        # if pygame.sprite.collide_mask(self, player):
+        #     player.damage(self.damage)
+        #     self.kill()
 
 
 class BulletParticle(pygame.sprite.Sprite):
@@ -796,6 +806,7 @@ class Bullet(pygame.sprite.Sprite):
         self.damage = parent.damage
         self.is_player = is_player
         self.explosion = eval(self.explosion)
+        self.stopped = False
 
         self.image = load_image(self.img_path, True)
 
@@ -812,6 +823,12 @@ class Bullet(pygame.sprite.Sprite):
         self.rect.x += self.velocity[0]
         self.rect.y += self.velocity[1]
 
+        if self.stopped:
+            self.image.set_alpha(self.image.get_alpha() - 2)
+            if self.image.get_alpha() <= 1:
+                self.kill()
+            return
+
         # Генерация частиц
         if self.particles:
             for _ in range(random.randint(1, 3)):
@@ -821,10 +838,13 @@ class Bullet(pygame.sprite.Sprite):
 
         # Столкновение со стеной (препятствием)
         if pygame.sprite.spritecollideany(self, wall_group):
-            create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
-            self.kill()
+            # create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
             if self.explosion:
                 explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
+                self.kill()
+            else:
+                self.stopped = True
+                self.velocity = [0, 0]
 
         if self.is_player:
             if pygame.sprite.spritecollideany(self, enemy_group):
@@ -841,7 +861,7 @@ class Bullet(pygame.sprite.Sprite):
                 self.kill()
 
 
-class Enemy(pygame.sprite.Sprite):
+class Bandit(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(all_sprites, layer4, enemy_group)
         self.frames = {'south': [],
@@ -948,36 +968,56 @@ class Enemy(pygame.sprite.Sprite):
                 if pygame.sprite.spritecollideany(self, wall_group):
                     if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
                                pygame.sprite.spritecollide(self, wall_group, False))):
-                        self.moving = False
-                        self.moving_direction[0] = 0
-                        self.rect = self.rect.move(-self.speed, 0)
+                        if not self.active:
+                            self.moving = False
+                            self.moving_direction[0] = 0
+                            self.rect = self.rect.move(-self.speed, 0)
+                        else:
+                            self.moving_direction[0] = 0
+                            self.moving_direction[1] = random.choice((-1, 1))
+                            self.rect = self.rect.move(-self.speed, 0)
             elif self.moving_direction[0] == -1:
                 self.rect = self.rect.move(-self.speed, 0)
                 self.facing = 'west'
                 if pygame.sprite.spritecollideany(self, wall_group):
                     if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
                                pygame.sprite.spritecollide(self, wall_group, False))):
-                        self.moving = False
-                        self.moving_direction[0] = 0
-                        self.rect = self.rect.move(self.speed, 0)
+                        if not self.active:
+                            self.moving = False
+                            self.moving_direction[0] = 0
+                            self.rect = self.rect.move(self.speed, 0)
+                        else:
+                            self.moving_direction[0] = 0
+                            self.moving_direction[1] = random.choice((-1, 1))
+                            self.rect = self.rect.move(self.speed, 0)
             if self.moving_direction[1] == 1:
                 self.rect = self.rect.move(0, self.speed)
                 self.facing = 'south'
                 if pygame.sprite.spritecollideany(self, wall_group):
                     if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
                                pygame.sprite.spritecollide(self, wall_group, False))):
-                        self.rect = self.rect.move(0, -self.speed)
-                        self.moving = False
-                        self.moving_direction[1] = 0
+                        if not self.active:
+                            self.rect = self.rect.move(0, -self.speed)
+                            self.moving = False
+                            self.moving_direction[1] = 0
+                        else:
+                            self.moving_direction[1] = 0
+                            self.moving_direction[0] = random.choice((-1, 1))
+                            self.rect = self.rect.move(0, -self.speed)
             elif self.moving_direction[1] == -1:
                 self.rect = self.rect.move(0, -self.speed)
                 self.facing = 'north'
                 if pygame.sprite.spritecollideany(self, wall_group):
                     if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
                                pygame.sprite.spritecollide(self, wall_group, False))):
-                        self.moving = False
-                        self.moving_direction[1] = 0
-                        self.rect = self.rect.move(0, self.speed)
+                        if not self.active:
+                            self.moving = False
+                            self.moving_direction[1] = 0
+                            self.rect = self.rect.move(0, self.speed)
+                        else:
+                            self.moving_direction[1] = 0
+                            self.moving_direction[0] = random.choice((-1, 1))
+                            self.rect = self.rect.move(0, self.speed)
 
         # Обработка событий: выстрел
         # if 'event' in kwargs.keys():
