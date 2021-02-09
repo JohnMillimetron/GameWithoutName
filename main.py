@@ -34,6 +34,7 @@ layer1, layer2, layer3, layer4, layer5 = \
     pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group(), pygame.sprite.Group()
 
 can_open_inventory = True
+tile_images_count = {'light day': (7, 1), 'dark underground': (1, 1)}
 
 
 def load_image(name, per_pixel_alpha=False, color_key=None):
@@ -61,16 +62,34 @@ def load_level(filename):
     filename = "data/levels/" + filename
     # читаем уровень, убирая символы перевода строки
     with open(filename, 'r') as mapFile:
-        level_map = [line.strip() for line in mapFile]
+        global tileset
+        tileset = mapFile.readline().strip()
+        level_map = []
+        chests_data = []
+
+        line = mapFile.readline().strip()
+        while line != 'end':
+            level_map.append(line)
+            line = mapFile.readline().strip()
+
+        line = mapFile.readline().strip()
+        while line.startswith('c'):
+            chests_data.append(line.strip()[2:])
+            line = mapFile.readline().strip()
+
+        other_data = [line.strip() for line in mapFile]
 
     # и подсчитываем максимальную длину
     max_width = max(map(len, level_map))
 
     # дополняем каждую строку пустыми клетками ('.')
-    return list(map(lambda x: x.ljust(max_width, '.'), level_map))
+    return list(map(lambda x: x.ljust(max_width, '.'), level_map)), chests_data
 
 
-def generate_level(level):
+def generate_level(data):
+    level, chests_data = data
+
+    chests_coords = []
     new_player, x, y = None, None, None
     for y in range(len(level)):
         for x in range(len(level[y])):
@@ -90,10 +109,16 @@ def generate_level(level):
                 boss = Boss(x, y)
             elif level[y][x] == 'c':
                 Tile('empty', x, y)
-                Chest(x, y, 'closed')
-            elif level[y][x] == 'e':
+                chests_coords.append((x, y))
+                # Chest(x, y, 'closed')
+            elif level[y][x] == 'b':
                 Tile('empty', x, y)
                 Bandit(x, y)
+
+    print(chests_coords, chests_data)
+    for i in range(len(chests_coords)):
+        Chest(*chests_coords[i], *tuple(map(lambda p: eval(p), chests_data[i].split(' '))))
+
     new_player = Player(p_x, p_y)
     return new_player, x, y
 
@@ -414,7 +439,7 @@ def open_inventory():
 
 def level1():
     global player, gui
-    player, level_x, level_y = generate_level(load_level('map2.txt'))
+    player, level_x, level_y = generate_level(load_level('map3.txt'))
     camera = Camera()
     gui = Gui()
 
@@ -423,7 +448,8 @@ def level1():
     player.inventory.add_equipment(Armor('Старая куртка'))
     player.inventory.add_equipment(Armor(1))
     player.inventory.add_equipment(Armor(2))
-    player.inventory.add_equipment(Armor(3))
+    player.inventory.add(Armor(3))
+    player.inventory.add(RangedWeapon('Пёсопушка'))
 
     player.refresh_image()
 
@@ -457,9 +483,8 @@ def level1():
 
 
 tile_images = {
-    'wall': load_image('wall.png'),
-    # 'empty': pygame.Surface((100, 100))
-    'empty': load_image(f'grass{random.randint(1, 2)}.png')
+    'wall': 'light day',
+    'empty': 'light day'
 }
 
 
@@ -551,11 +576,15 @@ class BulletParticle(pygame.sprite.Sprite):
 class Tile(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
         super().__init__(tiles_group, all_sprites, layer1)
+
         if tile_type == 'empty':
-            self.image = load_image(f'grass{random.randint(1, 7)}.png')
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'floor{random.randint(1, tile_images_count.get(tileset)[0])}.png'))
         elif tile_type == 'wall':
-            self.image = load_image(f'wall.png')
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'wall{random.randint(1, tile_images_count.get(tileset)[1])}.png'))
             self.add(obstacle_group, wall_group)
+
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * pos_y)
         self.mask = pygame.mask.from_surface(self.image)
@@ -696,7 +725,7 @@ class Player(pygame.sprite.Sprite):
 
         # Обработка событий: выстрел
         if 'event' in kwargs.keys():
-            if kwargs['event'].type == pygame.MOUSEBUTTONDOWN:
+            if kwargs['event'].type == pygame.MOUSEBUTTONDOWN and not keys[pygame.K_f]:
                 if self.weapon1 is not None:
                     if self.weapon1.parent.loaded:
                         bullet_direction_vector = [kwargs['event'].pos[0] - (self.rect.x + 37.5),
@@ -1174,8 +1203,7 @@ class Bar(pygame.sprite.Sprite):
 
 
 class Chest(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, chest_state='closed', chest_level=1,
-                 item_types=('armor', 'ranged_weapons', 'items')):
+    def __init__(self, pos_x, pos_y, chest_state='closed', item_levels='any', item_types='any'):
         super().__init__(wall_group, all_sprites, layer2, obstacle_group)
         if chest_state == 'closed':
             self.image = load_image(f'chest1_closed.png', True)
@@ -1186,16 +1214,18 @@ class Chest(pygame.sprite.Sprite):
         self.locked, self.key_id, self.opened = False, None, False
 
         items = []
-        for i in item_types:
-            con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
-            cur = con.cursor()
-            items.append((i, *map(lambda x: x[0], cur.execute(f"""SELECT id FROM {i}
-                                             WHERE rareness={chest_level}""").fetchall())))
+        for i in (('armor', 'ranged_weapons', 'items') if item_types == 'any' else
+        [item_types] if type(item_types) == str else item_types):
+            for lvl in ([item_levels] if type(item_levels) == int else
+            range(10) if item_levels == 'any' else item_levels):
+                con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
+                cur = con.cursor()
+                items.append((i, *map(lambda x: x[0], cur.execute(f"""SELECT id FROM {i}
+                                                 WHERE rareness={lvl}""").fetchall())))
         con.close()
 
         item = [None]
         while len(item) == 1:
-            print(item)
             item = random.choice(items)
 
         if item[0] == 'armor':
@@ -1206,14 +1236,11 @@ class Chest(pygame.sprite.Sprite):
             self.item = Item(item[1])
 
     def update(self, *args, **kwargs):
-        # self.interact_rect = pygame.Rect(self.rect.x + self.rect.width / 2 - self.interact_range,
-        #                                  self.rect.y + self.rect.height / 2 - self.interact_range,
-        #                                  self.interact_range * 2, self.interact_range * 2)
         keys = kwargs['keys']
         event = kwargs['event'] if 'event' in kwargs.keys() else None
         if event is not None and keys[pygame.K_f]:
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == pygame.BUTTON_RIGHT:
+                if event.button == pygame.BUTTON_LEFT:
                     if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
                         self.interact()
 
@@ -1222,7 +1249,7 @@ class Chest(pygame.sprite.Sprite):
         self.opened = True
         create_particle(self.rect.x + 40, self.rect.y + 40, 15)
         a = self.item.generate_sprite(self.rect.x + self.rect.width / 2, self.rect.y - self.rect.height * 1.5,
-                                  where='world')
+                                      where='world')
         a.rect.move(-self.rect.width / 2, 0)
 
     def interact(self):
@@ -1418,7 +1445,7 @@ class ItemSprite(pygame.sprite.Sprite):
             event = kwargs['event'] if 'event' in kwargs.keys() else None
             if event is not None and keys[pygame.K_f]:
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == pygame.BUTTON_RIGHT:
+                    if event.button == pygame.BUTTON_LEFT:
                         if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
                             self.pickup()
 
@@ -1451,36 +1478,10 @@ class Armor:
         return ArmorSprite(self, x, y, self.img_path, where=where)
 
 
-class ArmorSprite(pygame.sprite.Sprite):
+class ArmorSprite(ItemSprite):
     def __init__(self, parent, x, y, image_path, where='inv'):
-        super().__init__()
-
-        self.in_world = False
-        if where == 'inv':
-            self.add(items_in_inventory)
-        elif where == 'world':
-            self.add(all_sprites, layer2)
-            self.in_world = True
-
-        self.img_path = image_path
-        self.parent = parent
-
-        self.image = pygame.transform.scale(load_image(f'items\\armor\\{self.img_path}_sprite.png', True), (100, 100))
-        self.rect = self.image.get_rect().move(x, y)
-
-    def update(self, *args, **kwargs):
-        if self.in_world:
-            keys = kwargs['keys']
-            event = kwargs['event'] if 'event' in kwargs.keys() else None
-            if event is not None and keys[pygame.K_f]:
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == pygame.BUTTON_RIGHT:
-                        if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
-                            self.pickup()
-
-    def pickup(self):
-        player.inventory.add(self.parent)
-        self.kill()
+        image_path = os.path.join('items', 'armor', f'{image_path}_sprite.png')
+        super().__init__(parent, x, y, image_path, where)
 
 
 player = None

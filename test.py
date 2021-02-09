@@ -88,17 +88,6 @@ class Tile(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
 
 
-class Tree(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y):
-        super().__init__(wall_group, all_sprites)
-        self.image = pygame.transform.scale(load_image(f'tree1.png', True), (175, 235))
-        self.rect = self.image.get_rect().move(tile_width * pos_x, tile_height * pos_y)
-        # self.rect.move(tile_width * pos_x, tile_height * pos_y)
-
-    def update(self):
-        pass
-
-
 class Player(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(player_group, all_sprites)
@@ -108,10 +97,11 @@ class Player(pygame.sprite.Sprite):
                        'east': [],
                        'west': []}
 
-        self.cut_sheet(load_image('player\\output_image1.png', True, color_key=-1), 4, 4)
+        self.cut_sheet(load_image('player\\player_sheet.png', True, color_key=-1), 4, 4)
         self.image = self.frames.get('south')[0]
         self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
         self.mask = pygame.mask.from_surface(self.image)
+        self.moving, self.moving_direction = False, [0, 0]
 
     def cut_sheet(self, sheet, columns, rows):
         for j in range(rows):
@@ -124,23 +114,47 @@ class Player(pygame.sprite.Sprite):
         keys = pygame.key.get_pressed()
         if keys[pygame.K_w]:
             self.rect = self.rect.move(0, -self.speed)
+            self.moving = True
+            self.moving_direction[1] = 1
+            self.facing = 'north'
             if pygame.sprite.spritecollideany(self, wall_group):
-                if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, wall_group)):
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.moving = False
+                    self.moving_direction[1] = 0
                     self.rect = self.rect.move(0, self.speed)
         if keys[pygame.K_d]:
             self.rect = self.rect.move(self.speed, 0)
+            self.moving = True
+            self.moving_direction[0] = 1
+            self.facing = 'east'
             if pygame.sprite.spritecollideany(self, wall_group):
-                if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, wall_group)):
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.moving = False
+                    self.moving_direction[0] = 0
                     self.rect = self.rect.move(-self.speed, 0)
         if keys[pygame.K_s]:
             self.rect = self.rect.move(0, self.speed)
+            self.moving = True
+            self.moving_direction[1] = -1
+            self.facing = 'south'
             if pygame.sprite.spritecollideany(self, wall_group):
-                if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, wall_group)):
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
                     self.rect = self.rect.move(0, -self.speed)
+                    self.moving = False
+                    self.moving_direction[1] = 0
         if keys[pygame.K_a]:
             self.rect = self.rect.move(-self.speed, 0)
+            self.moving = True
+            self.moving_direction[0] = -1
+            self.facing = 'west'
             if pygame.sprite.spritecollideany(self, wall_group):
-                if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, wall_group)):
+                if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                           pygame.sprite.spritecollide(self, wall_group, False))):
+                    self.moving = False
+                    self.moving_direction[0] = 0
                     self.rect = self.rect.move(self.speed, 0)
 
 
