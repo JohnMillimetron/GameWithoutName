@@ -410,7 +410,7 @@ def open_inventory():
             elif type(item) == Armor:
                 lines = [f'Элемент: {item.element}',
                          f'Защита: {item.armor_points}',
-                         f'Прочность: {item.max_durability}/{item.durability}',
+                         f'Прочность: {item.durability}/{item.max_durability}',
                          f'Стоимость: {item.cost}',
                          f'', f'Особенности', f'',
                          f'Зачарование: Ы']
@@ -788,6 +788,14 @@ class Player(pygame.sprite.Sprite):
             lose_screen()
 
     def damage(self, damage):
+        damage = damage
+        for i in self.inventory.equipment.values():
+            if type(i) == Armor:
+                damage = damage - i.armor_points if damage - i.armor_points >= 0 else 0
+                i.durability -= 1
+
+            if damage < 0:
+                damage = 0
         self.HP -= damage
 
 
@@ -1348,6 +1356,13 @@ class RangedWeapon:
                 self.reload = 0
                 self.loaded = True
 
+    def damage_wpn(self):
+        self.durability -= 1
+        if self.durability <= 0:
+            player.inventory.equipment[self.element] = None
+            return True
+        return False
+
 
 class RangedWeaponSprite(pygame.sprite.Sprite):
     def __init__(self, image_path, x, y, parent, where='inv', layer=layer4, is_player=True):
@@ -1394,6 +1409,8 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
                 Bullet(self.rect.x + self.rect.width, self.rect.y + self.rect.height / 2,
                        vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx,
                        self.parent, is_player=self.is_player)
+        if self.parent.damage_wpn():
+            self.kill()
         self.parent.loaded = False
 
     def move_to_layer(self, layer):
