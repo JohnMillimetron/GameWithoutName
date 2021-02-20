@@ -761,28 +761,31 @@ class Player(pygame.sprite.Sprite):
             self.weapon1 = weapon1.generate_sprite(self.rect.x + 50, self.rect.y, where='hand')
             self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
             self.weapon1.rect = self.weapon1.image.get_rect()
-        weapon2 = self.inventory.get_equipment('weapon2')
-        if self.weapon2 is not None:
-            self.weapon2.kill()
-        if weapon2 is not None:
-            self.weapon2 = weapon1.generate_sprite(self.rect.x - 50, self.rect.y, where='hand')
-            self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
-            self.weapon1.rect = self.weapon1.image.get_rect()
-            self.weapon2.rect.x, weapon2.rect.y = self.rect.x - 50, self.rect.y
-        if self.facing == 'west':
-            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
-            self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
-            self.weapon1.move_to_layer(layer4)
-        elif self.facing == 'east':
-            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
-            self.weapon1.move_to_layer(layer4)
-        elif self.facing == 'north':
-            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
-            self.weapon1.move_to_layer(layer3)
-        elif self.facing == 'south':
-            self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x, self.rect.y + 50
-            self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
-            self.weapon1.move_to_layer(layer4)
+
+        # weapon2 = self.inventory.get_equipment('weapon2')
+        # if self.weapon2 is not None:
+        #     self.weapon2.kill()
+        # if weapon2 is not None:
+        #     self.weapon2 = weapon1.generate_sprite(self.rect.x - 50, self.rect.y, where='hand')
+        #     self.weapon1.image = pygame.transform.scale(self.weapon1.image, (64, 64))
+        #     self.weapon1.rect = self.weapon1.image.get_rect()
+        #     self.weapon2.rect.x, weapon2.rect.y = self.rect.x - 50, self.rect.y
+
+        if self.weapon1 is not None:
+            if self.facing == 'west':
+                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
+                self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
+                self.weapon1.move_to_layer(layer4)
+            elif self.facing == 'east':
+                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
+                self.weapon1.move_to_layer(layer4)
+            elif self.facing == 'north':
+                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
+                self.weapon1.move_to_layer(layer3)
+            elif self.facing == 'south':
+                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x, self.rect.y + 50
+                self.weapon1.image = pygame.transform.rotate(self.weapon1.image, -90)
+                self.weapon1.move_to_layer(layer4)
 
         if self.HP <= 0:
             lose_screen()
@@ -1360,6 +1363,7 @@ class RangedWeapon:
         self.durability -= 1
         if self.durability <= 0:
             player.inventory.equipment[self.element] = None
+            player.weapon1.kill()
             return True
         return False
 

@@ -53,7 +53,6 @@ def load_level(filename):
 
 def generate_level(level):
     new_player, x, y = None, None, None
-    stuff = []
     for y in range(len(level)):
         for x in range(len(level[y])):
             if level[y][x] == '.':
@@ -63,13 +62,7 @@ def generate_level(level):
             elif level[y][x] == '@':
                 Tile('empty', x, y)
                 p_x, p_y = x, y
-            else:
-                stuff.append((level[y][x], x, y))
 
-    for i in stuff:
-        if i[0] == 'T':
-            Tile('under_tree', i[1], i[2])
-            Tree(i[1], i[2])
     new_player = Player(p_x, p_y)
     return new_player, x, y
 
