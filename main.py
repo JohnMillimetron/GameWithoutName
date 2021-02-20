@@ -35,6 +35,7 @@ layer1, layer2, layer3, layer4, layer5 = \
 
 can_open_inventory = True
 tile_images_count = {'light day': (7, 1), 'dark underground': (1, 1)}
+debug_strings = []
 
 
 def load_image(name, per_pixel_alpha=False, color_key=None):
@@ -68,7 +69,7 @@ def load_level(filename):
         chests_data = []
 
         line = mapFile.readline().strip()
-        while line != 'end':
+        while 'end' not in line:
             level_map.append(line)
             line = mapFile.readline().strip()
 
@@ -130,6 +131,8 @@ def create_particle(x, y, count=30, type='default'):
             Particle((x, y), random.choice(numbers), random.choice(numbers))
     elif type == 'expl':
         ExplosionParticle((x, y))
+    elif type == 'slowup':
+        SlowupParticle((x, y))
 
 
 def explosion(x, y, r=200, damage=100, ptcls_count=500):
@@ -471,6 +474,25 @@ def level1():
         layer5.draw(screen)
         gui_group.draw(screen)
 
+        # font = pygame.font.SysFont('TimesNewRoman', 32)
+        # text = font.render(f'player.weapon1: {player.weapon1}', True, pygame.color.Color('black'))
+        # screen.blit(text, (20, 200))
+        # text = font.render(
+        #     f'weapon1.durability: {player.weapon1.parent.durability if player.weapon1 is not None else None}',
+        #     True, pygame.color.Color('black'))
+        # screen.blit(text, (20, 240))
+        # text = font.render(
+        #     f'inventory["weapon1"]: {player.inventory.get_equipment("weapon1")}',
+        #     True, pygame.color.Color('black'))
+        # screen.blit(text, (20, 280))
+        # for i in enemy_group.sprites():
+        #     text = font.render(f'enemy.weapon1: {player.weapon1}', True, pygame.color.Color('black'))
+        #     screen.blit(text, (20, 340))
+        #     text = font.render(
+        #         f'enemy.weapon1.durability: {i.weapon1.parent.durability if i.weapon1 is not None else None}',
+        #         True, pygame.color.Color('black'))
+        #     screen.blit(text, (20, 380))
+
         camera.update(player)
         for sprite in all_sprites:
             camera.apply(sprite)
@@ -567,6 +589,32 @@ class BulletParticle(pygame.sprite.Sprite):
 
     def update(self, *args, **kwargs):
         self.lifetime -= 1
+        if not self.lifetime:
+            self.kill()
+        if not self.rect.colliderect(screen_rect):
+            self.kill()
+
+
+class SlowupParticle(pygame.sprite.Sprite):
+    def __init__(self, pos, speed=1, lifetime=60, color='blue', alpha=255):
+        super().__init__(all_sprites, layer5)
+        size = random.choice((3, 5, 7, 9))
+        self.image = pygame.Surface((size, size))
+        self.image.fill(pygame.Color(color))
+        self.image.set_alpha(alpha)
+        self.rect = self.image.get_rect()
+
+        self.lifetime, self.speed = lifetime, speed
+        self.counter = 0
+
+        self.rect.x, self.rect.y = pos
+
+    def update(self, *args, **kwargs):
+        self.lifetime -= 1
+        self.counter += 1
+        if self.counter == 4:
+            self.rect.y = self.rect.y - self.speed
+            self.counter = 0
         if not self.lifetime:
             self.kill()
         if not self.rect.colliderect(screen_rect):
@@ -755,6 +803,7 @@ class Player(pygame.sprite.Sprite):
 
         # Предметы в руках
         weapon1 = self.inventory.get_equipment('weapon1')
+        print(weapon1)
         if self.weapon1 is not None:
             self.weapon1.kill()
         if weapon1 is not None:
@@ -773,11 +822,11 @@ class Player(pygame.sprite.Sprite):
 
         if self.weapon1 is not None:
             if self.facing == 'west':
-                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 55
+                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 60
                 self.weapon1.image = pygame.transform.flip(self.weapon1.image, True, False)
                 self.weapon1.move_to_layer(layer4)
             elif self.facing == 'east':
-                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x - 5, self.rect.y + 55
+                self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 55, self.rect.y + 60
                 self.weapon1.move_to_layer(layer4)
             elif self.facing == 'north':
                 self.weapon1.rect.x, self.weapon1.rect.y = self.rect.x + 70, self.rect.y + 50
@@ -928,6 +977,7 @@ class Bandit(pygame.sprite.Sprite):
         # Связанные спрайты предметов в руках
         self.weapon1_inv = RangedWeapon('Старый лук', is_player=False)
         self.weapon1 = self.weapon1_inv.generate_sprite(self.rect.x + 50, self.rect.y, where='hand')
+        self.weapon1.parent.set_parent(self)
 
         self.interact_range = 150
         self.player_see_range, self.player_unsee_range = 500, 700
@@ -1258,10 +1308,10 @@ class Chest(pygame.sprite.Sprite):
     def open(self):
         self.image = load_image(f'chest1_opened.png', True)
         self.opened = True
-        create_particle(self.rect.x + 40, self.rect.y + 40, 15)
+        # create_particle(self.rect.x + 40, self.rect.y + 40, 15)
         a = self.item.generate_sprite(self.rect.x + self.rect.width / 2, self.rect.y - self.rect.height * 1.5,
                                       where='world')
-        a.rect.move(-self.rect.width / 2, 0)
+        a.rect.x = a.rect.x - a.rect.width / 2
 
     def interact(self):
         if not self.locked and not self.opened:
@@ -1348,6 +1398,7 @@ class RangedWeapon:
         self.is_player = is_player
         self.max_durability = self.durability
         self.element = 'weapon1'
+        self.parent = player if self.is_player else None
 
     def generate_sprite(self, x, y, where='inv'):
         return RangedWeaponSprite(self.img_path, x, y, parent=self, where=where, is_player=self.is_player)
@@ -1359,11 +1410,16 @@ class RangedWeapon:
                 self.reload = 0
                 self.loaded = True
 
+    def set_parent(self, parent):
+        self.parent = parent
+
     def damage_wpn(self):
         self.durability -= 1
         if self.durability <= 0:
-            player.inventory.equipment[self.element] = None
-            player.weapon1.kill()
+            if self.is_player:
+                player.inventory.equipment[self.element] = None
+                player.weapon1.kill()
+                player.weapon1 = None
             return True
         return False
 
@@ -1398,6 +1454,13 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
                         if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
                             self.pickup()
 
+            # Генерация частиц
+            if random.randint(0, 100) >= 75:
+                a = random.randint(0, 359)
+                SlowupParticle((self.rect.x + self.rect.width / 2 + math.cos(a) * 60,
+                                self.rect.y + self.rect.height / 2 + math.sin(a) * 60),
+                               1, 90, '#FFD700', random.randint(100, 200))
+
     def pickup(self):
         player.inventory.add(self.parent)
         self.kill()
@@ -1413,8 +1476,10 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
                 Bullet(self.rect.x + self.rect.width, self.rect.y + self.rect.height / 2,
                        vx * self.parent.bullet_speed, vy * self.parent.bullet_speed, vy, vx,
                        self.parent, is_player=self.is_player)
-        if self.parent.damage_wpn():
-            self.kill()
+        if self.is_player:
+            if self.parent.damage_wpn():
+                for i in self.groups():
+                    self.remove(i)
         self.parent.loaded = False
 
     def move_to_layer(self, layer):
@@ -1469,6 +1534,13 @@ class ItemSprite(pygame.sprite.Sprite):
                     if event.button == pygame.BUTTON_LEFT:
                         if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
                             self.pickup()
+
+            # Генерация частиц
+            if random.randint(0, 100) >= 75:
+                a = random.randint(0, 359)
+                SlowupParticle((self.rect.x + self.rect.width / 2 + math.cos(a) * 60,
+                                self.rect.y + self.rect.height / 2 + math.sin(a) * 60),
+                               1, 90, '#FFD700', random.randint(100, 200))
 
     def pickup(self):
         player.inventory.add(self.parent)
