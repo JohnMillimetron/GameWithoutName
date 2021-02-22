@@ -54,6 +54,13 @@ player_image.blit(pants, (0, 0))
 player_image.blit(boots, (0, 0))
 
 pygame.image.save(player_image, 'data\\textures\\test_textures\\output_image1.png')
+player_image.set_colorkey(player_image.get_at((0, 0)))
+
+temp_surface = player_image.subsurface(pygame.Rect(player_image.get_rect().width - 100,
+                                                   player_image.get_rect().height - 100,
+                                                   100, 100))
+mask = pygame.mask.from_surface(temp_surface)
+mask_surface = mask.to_surface()
 
 running = True
 while running:
@@ -71,6 +78,7 @@ while running:
     # screen.blit(boots, (300, 148 + jacket_rect.height + pants_rect.height))
 
     screen.blit(player_image, (0, 0))
+    screen.blit(mask_surface, (100, 100))
 
     # screen.blit(bI, (300, 116))
 
