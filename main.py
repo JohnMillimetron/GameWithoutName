@@ -37,6 +37,7 @@ can_open_inventory = True
 tile_images_count = {'light day': (7, 1), 'dark underground': (1, 1)}
 labyrinth = [[]]
 debug_strings = []
+inventory_page, cell_clicked, prev_cell_clicked, item = 0, (0, 0, 0), None, None
 
 
 def load_image(name, per_pixel_alpha=False, color_key=None):
@@ -61,7 +62,7 @@ def load_image(name, per_pixel_alpha=False, color_key=None):
 
 
 def load_level(filename):
-    filename = "data/levels/" + filename
+    filename = os.path.join("data", "levels", filename)
     # читаем уровень, убирая символы перевода строки
     with open(filename, 'r') as mapFile:
         global tileset, labyrinth
@@ -118,6 +119,9 @@ def generate_level(data):
             elif level[y][x] == 'b':
                 Tile('empty', x, y)
                 Bandit(x, y)
+            elif level[y][x] == 'k':
+                Tile('empty', x, y)
+                Creeper(x, y)
 
     print(chests_coords, chests_data)
     for i in range(len(chests_coords)):
@@ -369,6 +373,7 @@ def generate_player_image():
 
 
 def open_inventory():
+    global inventory_page, cell_clicked, prev_cell_clicked, item
     player.can_open_inventory = False
     inventory_image = load_image('inventory.png', True)
     screen.blit(inventory_image, (0, 0))
@@ -383,15 +388,12 @@ def open_inventory():
     inventory_board = [[pygame.Rect(x * 110 + 755, y * 110 + 270, 100, 100) for x in range(4)] for y in range(4)]
     equipment_board = [[pygame.Rect(x * 100 + 445, y * 100 + 270, 90, 90) for x in range(3)] for y in range(4)]
 
-    item = None
-    cell_clicked, prev_cell_clicked, preprev_cell_clicked = (0, 0, 0), None, None
-
     # Цикл
     while True:
         # Отрисовка предметов
         items_in_inventory.empty()
         if player.inventory.items:
-            for i, item in enumerate(player.inventory):
+            for i, item in enumerate(player.inventory[16 * inventory_page:16 * (inventory_page + 1)]):
                 y, x = i // 4, i % 4
                 a = item.generate_sprite(inventory_board[y][x].x, inventory_board[y][x].y)
                 a.image = pygame.transform.scale(a.image, (90, 90))
@@ -426,6 +428,17 @@ def open_inventory():
                                 prev_cell_clicked = cell_clicked[:]
                                 cell_clicked = (x, y, 1)  # 1 - предмет в снаряжении
                                 break
+                    else:
+                        continue
+                    break
+                if pygame.Rect(755, 730, 30, 30).collidepoint(event.pos):
+                    inventory_page = inventory_page - 1 \
+                        if inventory_page > 0 else 0
+                    return True
+                elif pygame.Rect(825, 730, 30, 30).collidepoint(event.pos):
+                    inventory_page = inventory_page + 1 \
+                        if len(player.inventory.items) > 16 * (inventory_page + 1) else inventory_page
+                    return True
 
         # Получение предмета в ячейке
         if cell_clicked:
@@ -433,8 +446,8 @@ def open_inventory():
                 screen.fill('red', inventory_board[cell_clicked[1]][cell_clicked[0]])
                 screen.fill('#555555', (inventory_board[cell_clicked[1]][cell_clicked[0]].x + 5,
                                         inventory_board[cell_clicked[1]][cell_clicked[0]].y + 5, 90, 90))
-                if len(player.inventory) >= cell_clicked[1] * 4 + cell_clicked[0] + 1:
-                    item = player.inventory[cell_clicked[1] * 4 + cell_clicked[0]]
+                if len(player.inventory) >= cell_clicked[1] * 4 + cell_clicked[0] + 1 + inventory_page * 16:
+                    item = player.inventory[cell_clicked[1] * 4 + cell_clicked[0] + inventory_page * 16]
             elif cell_clicked[2] == 1:
                 screen.fill('red', equipment_board[cell_clicked[1]][cell_clicked[0]])
                 screen.fill('#555555', (equipment_board[cell_clicked[1]][cell_clicked[0]].x + 5,
@@ -452,6 +465,7 @@ def open_inventory():
                             equipment_board[cells_equipment.get(item.element)[1]]
                             [cells_equipment.get(item.element)[0]])
                 item = None
+                return True
 
         if item is not None:
             font = pygame.font.SysFont('TimesNewRoman', 22)
@@ -493,7 +507,9 @@ def open_inventory():
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_e]:
-            return
+            item = None
+            cell_clicked, prev_cell_clicked, preprev_cell_clicked = (0, 0, 0), None, None
+            return False
 
         items_in_inventory.draw(screen)
         pygame.display.flip()
@@ -507,11 +523,27 @@ def level1():
     camera = Camera()
     gui = Gui()
 
-    player.inventory.add_equipment(RangedWeapon(0))
-    player.inventory.add(Item('Цветочек'))
     player.inventory.add_equipment(Armor('Старая куртка'))
     player.inventory.add_equipment(Armor(1))
     player.inventory.add_equipment(Armor(2))
+    player.inventory.add_equipment(RangedWeapon(0))
+
+    player.inventory.add(Item('Цветочек'))
+    player.inventory.add(Armor(3))
+    player.inventory.add(RangedWeapon('Пёсопушка'))
+    player.inventory.add(Item('Цветочек'))
+    player.inventory.add(Armor(3))
+    player.inventory.add(RangedWeapon('Пёсопушка'))
+    player.inventory.add(Item('Цветочек'))
+    player.inventory.add(Armor(3))
+    player.inventory.add(RangedWeapon('Пёсопушка'))
+    player.inventory.add(Item('Цветочек'))
+    player.inventory.add(Armor(3))
+    player.inventory.add(RangedWeapon('Пёсопушка'))
+    player.inventory.add(Item('Цветочек'))
+    player.inventory.add(Armor(3))
+    player.inventory.add(RangedWeapon('Пёсопушка'))
+    player.inventory.add(Item('Цветочек'))
     player.inventory.add(Armor(3))
     player.inventory.add(RangedWeapon('Пёсопушка'))
 
@@ -782,7 +814,8 @@ class Player(pygame.sprite.Sprite):
         # Открытие инвентаря
         if keys[pygame.K_e]:
             if self.can_open_inventory:
-                open_inventory()
+                while open_inventory():
+                    pass
                 self.refresh_image()
         else:
             self.can_open_inventory = True
@@ -1008,13 +1041,12 @@ class Bullet(pygame.sprite.Sprite):
 
         if self.is_player:
             if pygame.sprite.spritecollideany(self, enemy_group):
-                if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, enemy_group)):
-                    pygame.sprite.spritecollideany(self, enemy_group).damage(self.damage)
-                    if self.explosion:
-                        explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
-                    self.kill()
+                pygame.sprite.spritecollideany(self, enemy_group).damage(self.damage)
+                if self.explosion:
+                    explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
+                self.kill()
         else:
-            if pygame.sprite.collide_mask(self, player):
+            if pygame.sprite.spritecollideany(self, player_group):
                 player.damage(self.damage)
                 if self.explosion:
                     explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
@@ -1088,15 +1120,17 @@ class Bandit(pygame.sprite.Sprite):
         # Сенпай заметь меня
         # Прямая видимость
         distance_to_player, player_position = rect_distance(self.rect, player.rect)
+        visibility = direct_visibility(self.rect, player.rect)
         # Агрится
-        if distance_to_player <= self.player_see_range and direct_visibility(self.rect, player.rect):
-            self.active = True
-            self.speed = 3
+        if distance_to_player <= self.player_see_range:
+            if visibility:
+                self.active = True
+                self.speed = 3
         # Не агрится
         if distance_to_player >= self.player_unsee_range:
             self.active = False
             self.speed = 2
-        if not direct_visibility(self.rect, player.rect):
+        if not visibility:
             if self.active:
                 self.prev_player_see_pos = player.position
 
@@ -1113,7 +1147,7 @@ class Bandit(pygame.sprite.Sprite):
         # Охотится
         else:
             # Аааа не могу стрелять надо подойти поближу
-            if distance_to_player > self.shoot_range or not direct_visibility(self.rect, player.rect):
+            if distance_to_player > self.shoot_range or not visibility:
                 self.moving = True
 
                 for i in tiles_group.sprites():
@@ -1296,6 +1330,193 @@ class Bandit(pygame.sprite.Sprite):
                 bar.kill()
             self.kill()
             self.weapon1.kill()
+
+    def damage(self, damage):
+        self.HP -= damage
+
+
+class Creeper(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(all_sprites, layer4, enemy_group, obstacle_group)
+        self.frames = {'south': [],
+                       'north': [],
+                       'east': [],
+                       'west': []}
+
+        # self.cut_sheet(load_image('characters\\bandit1_sheet.png', True, color_key=-1), 4, 4)
+        # self.image = self.frames.get('south')[0]
+        self.image = load_image(os.path.join('characters', 'exploid.png'), True)
+        self.rect = self.image.get_rect().move(tile_width * pos_x + 12.5, tile_height * pos_y + 12.5)
+        self.mask = pygame.mask.from_surface(self.image)
+
+        self.current_frame, self.walk_frame_change_timer = 0, 0
+        self.HP, self.max_HP = 40, 40
+        self.speed = 7
+        self.moving, self.moving_direction, self.facing = False, [0, 0], 'south'
+        self.path = False
+        self.active = False
+        self.state_change_timer = 120
+        self.explosion_timer = 120
+        self.player_see_range, self.explosion_range, self.player_unsee_range = 500, 30, 800
+
+        self.bars = []
+        self.bars.append(Bar(self, self.HP, self.max_HP, 'red', 180, 25))
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.frames = {'south': [], 'north': [], 'east': [], 'west': []}
+        for j in range(rows):
+            names = ('south', 'north', 'west', 'east')
+            for i in range(columns):
+                frame_location = (128 * i, 144 * j)
+                self.frames[names[j]].append(sheet.subsurface(pygame.Rect(frame_location, (128, 144))))
+
+    def refresh_bar(self, value_type):
+        if value_type == 'HP':
+            return self.HP
+
+    def update(self, *args, **kwargs):
+        # Сенпай заметь меня
+        # Прямая видимость
+        distance_to_player, player_position = rect_distance(self.rect, player.rect)
+        visibility = direct_visibility(self.rect, player.rect)
+
+        # Агрится
+        if distance_to_player <= self.player_see_range:
+            if visibility:
+                self.active = True
+        # Не агрится
+        if distance_to_player >= self.player_unsee_range:
+            self.active = False
+        if not visibility:
+            if self.active:
+                self.prev_player_see_pos = player.position
+
+        if self.active:
+            self.moving = True
+            if distance_to_player <= self.explosion_range:
+                if pygame.sprite.spritecollideany(self, player_group):
+                    self.moving = False
+                self.explosion_timer -= 1
+                if self.explosion_timer == 0:
+                    explosion(self.rect.x + self.rect.width / 2, self.rect.y + self.rect.height / 2, 200, 100)
+                    self.kill()
+                    for i in self.bars:
+                        i.kill()
+            else:
+                self.explosion_timer = 120
+                for i in tiles_group.sprites():
+                    if self.moving_direction == [0, -1]:
+                        point = self.rect.x + self.rect.width / 2, self.rect.y + self.rect.height
+                    elif self.moving_direction == [0, 1]:
+                        point = self.rect.x + self.rect.width / 2, self.rect.y + self.rect.height - 90
+                    elif self.moving_direction == [1, 0]:
+                        point = self.rect.x, self.rect.y + self.rect.height
+                    elif self.moving_direction == [-1, 0]:
+                        point = self.rect.x + self.rect.width, self.rect.y + self.rect.height
+                    elif self.moving_direction == [1, 1]:
+                        point = self.rect.x, self.rect.y + self.rect.height - 100
+                    elif self.moving_direction == [-1, 1]:
+                        point = self.rect.x + self.rect.width, self.rect.y + self.rect.height - 100
+                    elif self.moving_direction == [1, -1]:
+                        point = self.rect.x, self.rect.y + self.rect.height
+                    elif self.moving_direction == [-1, -1]:
+                        point = self.rect.x + self.rect.width, self.rect.y + self.rect.height
+                    else:
+                        point = self.rect.x + self.rect.width, self.rect.y + self.rect.height
+                    if i.rect.collidepoint(*point):
+                        self.position = i.posx, i.posy
+
+                global labyrinth
+                labirint = [[0 if a in '.@b' else 1 for a in i] for i in labyrinth]
+                poz_in = (self.position[1], self.position[0])
+                poz_out = (player.position[1], player.position[0])
+
+                path = [[x if x == 0 else -1 for x in y] for y in labirint]
+                path[poz_in[0]][poz_in[1]] = 1
+
+                if not found_path(path, poz_out):
+                    self.path = False
+                else:
+                    self.path = print_path(path, poz_out)
+
+                self.moving_direction = self.path[0]
+
+            # Движение по району
+            if self.moving:
+                if self.moving_direction[0] == 1:
+                    self.rect = self.rect.move(self.speed, 0)
+                    self.facing = 'east'
+                    if pygame.sprite.spritecollideany(self, obstacle_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            if not self.active:
+                                self.moving = False
+                                self.moving_direction[0] = 0
+                                self.rect = self.rect.move(-self.speed, 0)
+                            else:
+                                self.moving_direction[0] = 0
+                                self.moving_direction[1] = random.choice((-1, 1))
+                                self.rect = self.rect.move(-self.speed, 0)
+                elif self.moving_direction[0] == -1:
+                    self.rect = self.rect.move(-self.speed, 0)
+                    self.facing = 'west'
+                    if pygame.sprite.spritecollideany(self, obstacle_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            if not self.active:
+                                self.moving = False
+                                self.moving_direction[0] = 0
+                                self.rect = self.rect.move(self.speed, 0)
+                            else:
+                                self.moving_direction[0] = 0
+                                self.moving_direction[1] = random.choice((-1, 1))
+                                self.rect = self.rect.move(self.speed, 0)
+                if self.moving_direction[1] == 1:
+                    self.rect = self.rect.move(0, self.speed)
+                    self.facing = 'south'
+                    if pygame.sprite.spritecollideany(self, obstacle_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            if not self.active:
+                                self.rect = self.rect.move(0, -self.speed)
+                                self.moving = False
+                                self.moving_direction[1] = 0
+                            else:
+                                self.moving_direction[1] = 0
+                                self.moving_direction[0] = random.choice((-1, 1))
+                                self.rect = self.rect.move(0, -self.speed)
+                elif self.moving_direction[1] == -1:
+                    self.rect = self.rect.move(0, -self.speed)
+                    self.facing = 'north'
+                    if pygame.sprite.spritecollideany(self, obstacle_group):
+                        if any(map(lambda x: bool(pygame.sprite.collide_mask(self, x)),
+                                   pygame.sprite.spritecollide(self, wall_group, False))):
+                            if not self.active:
+                                self.moving = False
+                                self.moving_direction[1] = 0
+                                self.rect = self.rect.move(0, self.speed)
+                            else:
+                                self.moving_direction[1] = 0
+                                self.moving_direction[0] = random.choice((-1, 1))
+                                self.rect = self.rect.move(0, self.speed)
+
+            # Не помню, зачем я это писал
+            # if self.moving:
+            #     self.walk_frame_change_timer += 1
+            #     if self.walk_frame_change_timer >= 7:
+            #         self.walk_frame_change_timer = 0
+            #         self.current_frame += 1
+            #         if self.current_frame > 3:
+            #             self.current_frame = 0
+            # else:
+            #     self.current_frame = 0
+            # self.image = self.frames.get(self.facing)[self.current_frame]
+            # self.mask = pygame.mask.from_surface(self.image)
+
+        if self.HP <= 0:
+            for bar in self.bars:
+                bar.kill()
+            self.kill()
 
     def damage(self, damage):
         self.HP -= damage
