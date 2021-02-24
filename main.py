@@ -64,7 +64,7 @@ def load_image(name, per_pixel_alpha=False, color_key=None):
 def load_level(filename):
     filename = os.path.join("data", "levels", filename)
     # читаем уровень, убирая символы перевода строки
-    with open(filename, 'r') as mapFile:
+    with open(filename, 'r', encoding='UTF-8') as mapFile:
         global tileset, labyrinth
         tileset = mapFile.readline().strip()
         level_map = []
@@ -147,7 +147,7 @@ def explosion(x, y, r=200, damage=100, ptcls_count=500):
         ExplosionParticle((x, y))
     for sprite in enemy_group:
         if rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0] <= r:
-            sprite.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0])
+            sprite.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0], type='exp')
     if rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0] <= r:
         player.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0])
 
@@ -254,9 +254,8 @@ def print_path(path_arr, fin_point):
 
 def start_screen():
     intro_text = ["ЗАСТАВКА", "",
-                  "Правила игры",
-                  "НАжмите любую кнопку,",
-                  "чтобы"]
+                  "BETA_0.0.1", "TEST_LEVEL",
+                  "Нажмите любую кнопку, чтобы начать"]
 
     fon = pygame.Surface((screen.get_width(), screen.get_height()))
     fon.fill(pygame.Color('black'))
@@ -284,30 +283,30 @@ def start_screen():
 
 
 def lose_screen():
-    intro_text = ["ВЫ ЛОХ", "",
-                  "Вы проиграли",
-                  "НАжмите любую кнопку,",
-                  "текст"]
+    # intro_text = ["ВЫ ЛОХ", "",
+    #               "Вы проиграли",
+    #               "НАжмите любую кнопку,",
+    #               "текст"]
 
-    fon = pygame.transform.scale(load_image('milos_fon.jpg'), (WIDTH, HEIGHT))
-    screen.blit(fon, (0, 0))
-    font = pygame.font.Font(None, 30)
-    text_coord = 50
-    for line in intro_text:
-        string_rendered = font.render(line, 1, pygame.Color('white'))
-        intro_rect = string_rendered.get_rect()
-        text_coord += 10
-        intro_rect.top = text_coord
-        intro_rect.x = 50
-        text_coord += intro_rect.height
-        screen.blit(string_rendered, intro_rect)
+    fon = pygame.transform.scale(load_image('death_screen.jpg'), (WIDTH, HEIGHT))
+    # screen.blit(fon, (0, 0))
+    # font = pygame.font.Font(None, 30)
+    # text_coord = 50
+    # for line in intro_text:
+    #     string_rendered = font.render(line, 1, pygame.Color('white'))
+    #     intro_rect = string_rendered.get_rect()
+    #     text_coord += 10
+    #     intro_rect.top = text_coord
+    #     intro_rect.x = 50
+    #     text_coord += intro_rect.height
+    #     screen.blit(string_rendered, intro_rect)
 
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
-            elif event.type == pygame.KEYDOWN or \
-                    event.type == pygame.MOUSEBUTTONDOWN:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_ESCAPE]:
                 terminate()
         pygame.display.flip()
         clock.tick(FPS)
@@ -527,25 +526,6 @@ def level1():
     player.inventory.add_equipment(Armor(1))
     player.inventory.add_equipment(Armor(2))
     player.inventory.add_equipment(RangedWeapon(0))
-
-    player.inventory.add(Item('Цветочек'))
-    player.inventory.add(Armor(3))
-    player.inventory.add(RangedWeapon('Пёсопушка'))
-    player.inventory.add(Item('Цветочек'))
-    player.inventory.add(Armor(3))
-    player.inventory.add(RangedWeapon('Пёсопушка'))
-    player.inventory.add(Item('Цветочек'))
-    player.inventory.add(Armor(3))
-    player.inventory.add(RangedWeapon('Пёсопушка'))
-    player.inventory.add(Item('Цветочек'))
-    player.inventory.add(Armor(3))
-    player.inventory.add(RangedWeapon('Пёсопушка'))
-    player.inventory.add(Item('Цветочек'))
-    player.inventory.add(Armor(3))
-    player.inventory.add(RangedWeapon('Пёсопушка'))
-    player.inventory.add(Item('Цветочек'))
-    player.inventory.add(Armor(3))
-    player.inventory.add(RangedWeapon('Пёсопушка'))
 
     player.refresh_image()
 
@@ -963,7 +943,7 @@ class EnemyBullet(pygame.sprite.Sprite):
         self.image = pygame.transform.scale(load_image('potat.png', True), (75, 75))
         self.rect = self.image.get_rect()
         self.velocity = [vx, vy]
-        self.damage = 10
+        self.damage = 30
         self.rect.x, self.rect.y = pos_x, pos_y
         self.mask = pygame.mask.from_surface(self.image)
 
@@ -977,6 +957,9 @@ class EnemyBullet(pygame.sprite.Sprite):
         if pygame.sprite.spritecollideany(self, wall_group):
             create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
             self.kill()
+        if pygame.sprite.spritecollideany(self, player_group):
+            self.kill()
+            player.damage(self.damage)
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -1331,7 +1314,7 @@ class Bandit(pygame.sprite.Sprite):
             self.kill()
             self.weapon1.kill()
 
-    def damage(self, damage):
+    def damage(self, damage, type='def'):
         self.HP -= damage
 
 
@@ -1356,7 +1339,7 @@ class Creeper(pygame.sprite.Sprite):
         self.path = False
         self.active = False
         self.state_change_timer = 120
-        self.explosion_timer = 120
+        self.explosion_timer = 30
         self.player_see_range, self.explosion_range, self.player_unsee_range = 500, 30, 800
 
         self.bars = []
@@ -1403,7 +1386,7 @@ class Creeper(pygame.sprite.Sprite):
                     for i in self.bars:
                         i.kill()
             else:
-                self.explosion_timer = 120
+                self.explosion_timer = 30
                 for i in tiles_group.sprites():
                     if self.moving_direction == [0, -1]:
                         point = self.rect.x + self.rect.width / 2, self.rect.y + self.rect.height
@@ -1518,14 +1501,15 @@ class Creeper(pygame.sprite.Sprite):
                 bar.kill()
             self.kill()
 
-    def damage(self, damage):
-        self.HP -= damage
+    def damage(self, damage, type='def'):
+        if type != 'exp':
+            self.HP -= damage
 
 
 class Boss(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(boss_group, all_sprites, layer4, enemy_group, obstacle_group)
-        self.image = load_image('ВРАГ.png', True)
+        self.image = load_image('bosobsos.png', True)
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * (pos_y - 2))
         self.HP = 500
@@ -1538,7 +1522,8 @@ class Boss(pygame.sprite.Sprite):
 
     def update(self, *args, **kwargs):
         if random.randint(0, 100) > 90:
-            EnemyBullet(self.rect.x + 50, self.rect.y + 50, *random.choices((-5, -3, -2, -1, 1, 2, 3, 5), k=2))
+            EnemyBullet(self.rect.x + self.rect.width / 2 - 20, self.rect.y + self.rect.height / 2,
+                        *random.choices((-5, -3, -2, -1, 1, 2, 3, 5), k=2))
         if self.HP <= 0:
             create_particle(self.rect.x + 25, self.rect.y + 12.5)
             create_particle(self.rect.x + 50, self.rect.y + 25)
@@ -1621,27 +1606,35 @@ class Chest(pygame.sprite.Sprite):
             tile_width * pos_x + 10, tile_height * pos_y + 10)
         self.locked, self.key_id, self.opened = False, None, False
 
-        items = []
-        for i in (('armor', 'ranged_weapons', 'items') if item_types == 'any' else
-        [item_types] if type(item_types) == str else item_types):
-            for lvl in ([item_levels] if type(item_levels) == int else
-            range(10) if item_levels == 'any' else item_levels):
-                con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
-                cur = con.cursor()
-                items.append((i, *map(lambda x: x[0], cur.execute(f"""SELECT id FROM {i}
-                                                 WHERE rareness={lvl}""").fetchall())))
-        con.close()
+        if item_levels.startswith('name:'):
+            if item_types == 'armor':
+                self.item = Armor(item_levels.split(':')[1])
+            elif item_types == 'ranged_weapons':
+                self.item = RangedWeapon(item_levels.split(':')[1])
+            elif item_types == 'items':
+                self.item = Item(item_levels.split(':')[1])
+        else:
+            items = []
+            for i in (('armor', 'ranged_weapons', 'items') if item_types == 'any' else
+            [item_types] if type(item_types) == str else item_types):
+                for lvl in ([item_levels] if type(item_levels) == int else
+                range(10) if item_levels == 'any' else item_levels):
+                    con = sqlite3.connect(os.path.join('data', 'items', 'items.sqlite'))
+                    cur = con.cursor()
+                    items.append((i, *map(lambda x: x[0], cur.execute(f"""SELECT id FROM {i}
+                                                     WHERE rareness={lvl}""").fetchall())))
+            con.close()
 
-        item = [None]
-        while len(item) == 1:
-            item = random.choice(items)
+            item = [None]
+            while len(item) == 1:
+                item = random.choice(items)
 
-        if item[0] == 'armor':
-            self.item = Armor(item[1])
-        elif item[0] == 'ranged_weapons':
-            self.item = RangedWeapon(item[1])
-        elif item[0] == 'items':
-            self.item = Item(item[1])
+            if item[0] == 'armor':
+                self.item = Armor(item[1])
+            elif item[0] == 'ranged_weapons':
+                self.item = RangedWeapon(item[1])
+            elif item[0] == 'items':
+                self.item = Item(item[1])
 
     def update(self, *args, **kwargs):
         keys = kwargs['keys']
@@ -1928,6 +1921,7 @@ player = None
 clock = pygame.time.Clock()
 inventory = Inventory()
 
+start_screen()
 level1()
 
 pygame.quit()
