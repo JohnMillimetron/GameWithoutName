@@ -16,6 +16,8 @@ player_group = pygame.sprite.Group()
 tiles_group = pygame.sprite.Group()
 wall_group = pygame.sprite.Group()
 
+tileset = 'light day'
+
 
 def load_image(name, per_pixel_alpha=False, color_key=None):
     fullname = os.path.join('data\\textures', name)
@@ -71,11 +73,11 @@ class Tile(pygame.sprite.Sprite):
     def __init__(self, tile_type, pos_x, pos_y):
         super().__init__(tiles_group, all_sprites)
         if tile_type == 'empty':
-            self.image = load_image(f'grass{random.randint(1, 7)}.png')
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'floor8.png'))
         elif tile_type == 'wall':
-            self.image = load_image(f'wall.png')
-        elif tile_type == 'under_tree':
-            self.image = load_image(f'grassundertree1.png')
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'wall1.png'))
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * pos_y)
         self.mask = pygame.mask.from_surface(self.image)
@@ -149,6 +151,20 @@ class Player(pygame.sprite.Sprite):
                     self.moving = False
                     self.moving_direction[0] = 0
                     self.rect = self.rect.move(self.speed, 0)
+
+
+class Tree(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(wall_group)
+
+        self.image = load_image("tree1.png", True)
+        self.rect = self.image.get_rect()
+        self.rect = self.rect.move((tile_width * pos_x) + (tile_width / 2) - (self.rect.width / 2),
+                                   (tile_height * pos_y) - self.rect.height)
+        self.mask = pygame.mask.from_surface(self.image)
+        for i in range(self.rect.height - 100):
+            for j in range(self.rect.width):
+                self.mask.set_at((j, i), 0)
 
 
 class Camera:

@@ -91,11 +91,12 @@ def load_level(filename):
 
 
 def generate_level(data):
+    global player
     level, chests_data = data
 
     b_id = 0
     chests_coords = []
-    new_player, x, y = None, None, None
+    new_player, x, y, exit_coords, boss_coords = None, None, None, None, None
     for y in range(len(level)):
         for x in range(len(level[y])):
             if level[y][x] == '.':
@@ -110,8 +111,7 @@ def generate_level(data):
                 p_x, p_y = x, y
             elif level[y][x] == 'B':
                 Tile('empty', x, y)
-                global boss
-                boss = Boss(x, y)
+                boss_coords = [x, y]
             elif level[y][x] == 'c':
                 Tile('empty', x, y)
                 chests_coords.append((x, y))
@@ -122,13 +122,41 @@ def generate_level(data):
             elif level[y][x] == 'k':
                 Tile('empty', x, y)
                 Creeper(x, y)
+            elif level[y][x] == 'T':
+                Tile('empty', x, y)
+                Tree(x, y)
+            elif level[y][x] == '-':
+                Tile('empty', x, y)
+                Tile('fence_g', x, y)
+            elif level[y][x] == '\\':
+                Tile('empty', x, y)
+                Tile('fence_r', x, y)
+            elif level[y][x] == '/':
+                Tile('empty', x, y)
+                Tile('fence_l', x, y)
+            elif level[y][x] == '╔':
+                Tile('empty', x, y)
+                Tile('fence_lu', x, y)
+            elif level[y][x] == '╗':
+                Tile('empty', x, y)
+                Tile('fence_ru', x, y)
+            elif level[y][x] == '╚':
+                Tile('empty', x, y)
+                Tile('fence_ld', x, y)
+            elif level[y][x] == '╝':
+                Tile('empty', x, y)
+                Tile('fence_rd', x, y)
+            elif level[y][x] == '^':
+                Tile('empty', x, y)
+                Tile('fence_ue', x, y)
+            elif level[y][x] == 'E':
+                exit_coords = [x, y]
 
-    print(chests_coords, chests_data)
     for i in range(len(chests_coords)):
-        Chest(*chests_coords[i], *tuple(map(lambda p: eval(p), chests_data[i].split(' '))))
+        Chest(*chests_coords[i], *tuple(map(lambda p: eval(p), chests_data[i].split(';'))))
 
-    new_player = Player(p_x, p_y)
-    return new_player, x, y
+    new_player = Player(p_x, p_y) if not player else (p_x, p_y)
+    return new_player, x, y, exit_coords, boss_coords
 
 
 def create_particle(x, y, count=30, type='default'):
@@ -147,9 +175,9 @@ def explosion(x, y, r=200, damage=100, ptcls_count=500):
         ExplosionParticle((x, y))
     for sprite in enemy_group:
         if rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0] <= r:
-            sprite.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0], type='exp')
+            sprite.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), sprite.rect)[0], typ='expl')
     if rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0] <= r:
-        player.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0])
+        player.damage(damage - (damage / r) * rect_distance(pygame.Rect(x, y, 1, 1), player.rect)[0], typ='expl')
 
 
 def terminate():
@@ -253,17 +281,21 @@ def print_path(path_arr, fin_point):
 
 
 def start_screen():
-    intro_text = ["ЗАСТАВКА", "",
-                  "BETA_0.0.1", "TEST_LEVEL",
-                  "Нажмите любую кнопку, чтобы начать"]
+    intro_text = [("НАЗВАНИЕ ПОТОМ ПРИДУМАЮ", 80), ("", 50),
+                  ("Демонстрационный уровень", 65), ("Управление: ", 50),
+                  ("WASD - перемещение", 30),
+                  ("ЛКМ - выстрел", 30),
+                  ("ЛКМ + F - взаимодействовать, подобрать предмет", 30),
+                  ("Е - инвентарь", 30), ("", 50),
+                  ("Press any key", 40)]
 
     fon = pygame.Surface((screen.get_width(), screen.get_height()))
     fon.fill(pygame.Color('black'))
     screen.blit(fon, (0, 0))
-    font = pygame.font.Font(None, 30)
     text_coord = 50
     for line in intro_text:
-        string_rendered = font.render(line, 1, pygame.Color('white'))
+        font = pygame.font.Font(None, line[1])
+        string_rendered = font.render(line[0], 1, pygame.Color('white'))
         intro_rect = string_rendered.get_rect()
         text_coord += 10
         intro_rect.top = text_coord
@@ -516,16 +548,37 @@ def open_inventory():
 
 
 def level1():
+    level_passed = False
+
+    class Downstairs(pygame.sprite.Sprite):
+        def __init__(self, pos_x, pos_y):
+            super().__init__(all_sprites, tiles_group, layer2, wall_group, obstacle_group)
+
+            self.image = load_image('downstairs.png', True)
+            self.posx, self.posy = pos_x, pos_y
+            self.rect = self.image.get_rect().move(
+                tile_width * pos_x, tile_height * pos_y)
+
+        def update(self, *args, **kwargs) -> None:
+            nonlocal level_passed
+            keys = kwargs['keys']
+            event = kwargs['event'] if 'event' in kwargs.keys() else None
+            if event is not None and keys[pygame.K_f]:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == pygame.BUTTON_LEFT:
+                        if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
+                            level_passed = True
+
     global player, gui
-    level_name = 'map3'
-    player, level_x, level_y = generate_level(load_level(f'{level_name}.txt'))
+    level_name = 'level1'
+    player, level_x, level_y, exit_coords, boss_coords = generate_level(load_level(f'{level_name}.txt'))
+    Downstairs(*exit_coords)
     camera = Camera()
     gui = Gui()
 
     player.inventory.add_equipment(Armor('Старая куртка'))
     player.inventory.add_equipment(Armor(1))
     player.inventory.add_equipment(Armor(2))
-    player.inventory.add_equipment(RangedWeapon(0))
 
     player.refresh_image()
 
@@ -573,6 +626,133 @@ def level1():
 
         all_sprites.update(keys=keys)
         gui_group.update()
+
+        if level_passed:
+            for i in all_sprites.sprites():
+                if type(i) != Player:
+                    i.kill()
+            return
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def level2():
+    level_passed = False
+
+    class Boss(pygame.sprite.Sprite):
+        def __init__(self, pos_x, pos_y):
+            super().__init__(boss_group, all_sprites, layer4, enemy_group, obstacle_group)
+            self.image = load_image('bosobsos.png', True)
+            self.rect = self.image.get_rect().move(
+                tile_width * pos_x, tile_height * (pos_y - 2))
+            self.HP = 500
+            self.bars = []
+            self.bars.append(Bar(self, self.HP, self.HP, 'red', 300, 30))
+
+        def refresh_bar(self, value_type):
+            if value_type == 'HP':
+                return self.HP
+
+        def update(self, *args, **kwargs):
+            if random.randint(0, 100) > 90:
+                BossBullet(self.rect.x + self.rect.width / 2 - 20, self.rect.y + self.rect.height / 2,
+                           *random.choices((-5, -3, -2, -1, 1, 2, 3, 5), k=2))
+
+        def damage(self, damage, typ='def'):
+            self.HP -= damage
+            if self.HP <= 0:
+                self.kill()
+                for bar in self.bars:
+                    bar.kill()
+                nonlocal level_passed
+                level_passed = True
+
+    class BossBullet(pygame.sprite.Sprite):
+        def __init__(self, pos_x, pos_y, vx, vy):
+            super().__init__(all_sprites, enemy_bullet_group, layer4)
+            self.press_allowed = True
+            self.image = pygame.transform.scale(load_image('potat.png', True), (75, 75))
+            self.rect = self.image.get_rect()
+            self.velocity = [vx, vy]
+            self.damage = 30
+            self.rect.x, self.rect.y = pos_x, pos_y
+            self.mask = pygame.mask.from_surface(self.image)
+
+        def update(self, *args, **kwargs):
+            self.rect.x += self.velocity[0]
+            self.rect.y += self.velocity[1]
+            if pygame.sprite.spritecollideany(self, player_bullet_group):
+                pygame.sprite.spritecollide(self, player_bullet_group, True)
+                create_particle(self.rect.x + 37.5, self.rect.y + 25)
+                self.kill()
+            if pygame.sprite.spritecollideany(self, wall_group):
+                create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
+                self.kill()
+            if pygame.sprite.spritecollideany(self, player_group):
+                self.kill()
+                player.damage(self.damage)
+
+    global player, gui
+    level_name = 'level2'
+    _, level_x, level_y, exit_coords, boss_coords = generate_level(load_level(f'{level_name}.txt'))
+    boss = Boss(*boss_coords)
+    camera = Camera()
+    gui = Gui()
+
+    player.rect.x, player.rect.y = list(map(lambda x: x * tile_width, _))
+    player.refresh_image()
+
+    counter = 0
+    running = True
+    while running:
+        keys = pygame.key.get_pressed()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                all_sprites.update(event=event, keys=keys)
+
+        screen.fill(pygame.Color("#AAAAAA"))
+
+        layer1.draw(screen)
+        layer2.draw(screen)
+        layer3.draw(screen)
+        layer4.draw(screen)
+        layer5.draw(screen)
+        gui_group.draw(screen)
+
+        # font = pygame.font.SysFont('TimesNewRoman', 32)
+        # text = font.render(f'player: {player.rect.x, player.rect.y}', True, pygame.color.Color('black'))
+        # screen.blit(text, (20, 200))
+        # # text = font.render(
+        # #     f'player.position: {player.position}',
+        # #     True, pygame.color.Color('black'))
+        # # screen.blit(text, (20, 280))
+        # # for i in enemy_group.sprites():
+        # #     text = font.render(f'enemy.active: {i.active}', True, pygame.color.Color('black'))
+        # #     screen.blit(text, (20, 340))
+        # #     text = font.render(
+        # #         f'direct visibility: {direct_visibility(player.rect, i.rect)}',
+        # #         True, pygame.color.Color('black'))
+        # #     screen.blit(text, (20, 380))
+        # #     text = font.render(
+        # #         f'enemy.path: {i.path}',
+        # #         True, pygame.color.Color('black'))
+        # #     screen.blit(text, (20, 420))
+        # # screen.blit(player.mask.to_surface(), (500, 500))
+
+        camera.update(player)
+        for sprite in all_sprites:
+            camera.apply(sprite)
+
+        all_sprites.update(keys=keys)
+        gui_group.update()
+
+        if level_passed:
+            counter += 1
+            if counter > 300:
+                return
 
         pygame.display.flip()
         clock.tick(FPS)
@@ -706,11 +886,62 @@ class Tile(pygame.sprite.Sprite):
             self.image = load_image(os.path.join(
                 'tiles', tileset, f'wall{random.randint(1, tile_images_count.get(tileset)[1])}.png'))
             self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_g':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_u.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_d':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_d.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_ru':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_ru.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_rd':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_rd.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_lu':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_lu.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_ld':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_ld.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_r':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_r.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_l':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_l.png'), True)
+            self.add(obstacle_group, wall_group)
+        elif tile_type == 'fence_ue':
+            self.image = load_image(os.path.join(
+                'tiles', tileset, f'fence_uend.png'), True)
+            self.add(obstacle_group, wall_group)
 
         self.posx, self.posy = pos_x, pos_y
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * pos_y)
         self.mask = pygame.mask.from_surface(self.image)
+
+
+class Tree(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y):
+        super().__init__(wall_group, layer5, all_sprites)
+
+        self.image = load_image("tree1.png", True)
+        self.image = pygame.transform.scale(self.image, (self.image.get_width() * 2, self.image.get_height() * 2))
+        self.rect = self.image.get_rect()
+        self.rect = self.rect.move((tile_width * pos_x) + (tile_width / 2) - (self.rect.width / 2),
+                                   (tile_height * pos_y) - self.rect.height + tile_height / 2)
+        self.mask = pygame.mask.from_surface(self.image)
+        # for i in range(self.rect.height - 100):
+        #     for j in range(self.rect.width):
+        #         self.mask.set_at((j, i), 0)
 
 
 class Button(pygame.sprite.Sprite):
@@ -746,7 +977,7 @@ class Player(pygame.sprite.Sprite):
         self.current_frame, self.walk_frame_change_timer = 0, 0
         self.HP, self.max_HP = 300, 300
         self.can_open_inventory = True
-        self.speed = 8
+        self.speed = 12
         self.moving, self.moving_direction, self.facing = False, [0, 0], 'south'
         self.inventory = inventory
         for i in tiles_group.sprites():
@@ -924,7 +1155,7 @@ class Player(pygame.sprite.Sprite):
         if self.HP <= 0:
             lose_screen()
 
-    def damage(self, damage):
+    def damage(self, damage, typ='def'):
         damage = damage
         for i in self.inventory.equipment.values():
             if type(i) == Armor:
@@ -935,31 +1166,9 @@ class Player(pygame.sprite.Sprite):
                 damage = 0
         self.HP -= damage
 
-
-class EnemyBullet(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, vx, vy):
-        super().__init__(all_sprites, enemy_bullet_group, layer4)
-        self.press_allowed = True
-        self.image = pygame.transform.scale(load_image('potat.png', True), (75, 75))
-        self.rect = self.image.get_rect()
-        self.velocity = [vx, vy]
-        self.damage = 30
-        self.rect.x, self.rect.y = pos_x, pos_y
-        self.mask = pygame.mask.from_surface(self.image)
-
-    def update(self, *args, **kwargs):
-        self.rect.x += self.velocity[0]
-        self.rect.y += self.velocity[1]
-        if pygame.sprite.spritecollideany(self, player_bullet_group):
-            pygame.sprite.spritecollide(self, player_bullet_group, True)
-            create_particle(self.rect.x + 37.5, self.rect.y + 25)
-            self.kill()
-        if pygame.sprite.spritecollideany(self, wall_group):
-            create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
-            self.kill()
-        if pygame.sprite.spritecollideany(self, player_group):
-            self.kill()
-            player.damage(self.damage)
+    def set_coords(self, p_x, p_y):
+        self.rect = self.rect.move(tile_width * p_x + 12.5, tile_height * p_y + 12.5)
+        return self
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -991,6 +1200,7 @@ class Bullet(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = pos_x, pos_y - self.rect.height / 2
+        self.mask = pygame.mask.from_surface(self.image)
 
         self.velocity = [vx, vy]
         self.particles = eval(str(self.particles))
@@ -1014,13 +1224,14 @@ class Bullet(pygame.sprite.Sprite):
 
         # Столкновение со стеной (препятствием)
         if pygame.sprite.spritecollideany(self, wall_group):
-            # create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
-            if self.explosion:
-                explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
-                self.kill()
-            else:
-                self.stopped = True
-                self.velocity = [0, 0]
+            if pygame.sprite.collide_mask(self, pygame.sprite.spritecollideany(self, wall_group)):
+                # create_particle(self.rect.x + 37.5, self.rect.y + 37.5, 3)
+                if self.explosion:
+                    explosion(self.rect.x + self.rect.width, self.rect.y + self.rect.height)
+                    self.kill()
+                else:
+                    self.stopped = True
+                    self.velocity = [0, 0]
 
         if self.is_player:
             if pygame.sprite.spritecollideany(self, enemy_group):
@@ -1168,7 +1379,7 @@ class Bandit(pygame.sprite.Sprite):
                 else:
                     self.path = print_path(path, poz_out)
 
-                self.moving_direction = self.path[0]
+                self.moving_direction = self.path[0] if type(self.path) != bool else [0, 0]
             # Я тя вижу лох вонючий подь сюда стрелять буду
             else:
                 self.moving = False
@@ -1314,7 +1525,7 @@ class Bandit(pygame.sprite.Sprite):
             self.kill()
             self.weapon1.kill()
 
-    def damage(self, damage, type='def'):
+    def damage(self, damage, typ='def'):
         self.HP -= damage
 
 
@@ -1422,7 +1633,7 @@ class Creeper(pygame.sprite.Sprite):
                 else:
                     self.path = print_path(path, poz_out)
 
-                self.moving_direction = self.path[0]
+                self.moving_direction = self.path[0] if type(self.path) != bool else [0, 0]
 
             # Движение по району
             if self.moving:
@@ -1501,41 +1712,9 @@ class Creeper(pygame.sprite.Sprite):
                 bar.kill()
             self.kill()
 
-    def damage(self, damage, type='def'):
-        if type != 'exp':
+    def damage(self, damage, typ='def'):
+        if typ != 'expl':
             self.HP -= damage
-
-
-class Boss(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y):
-        super().__init__(boss_group, all_sprites, layer4, enemy_group, obstacle_group)
-        self.image = load_image('bosobsos.png', True)
-        self.rect = self.image.get_rect().move(
-            tile_width * pos_x, tile_height * (pos_y - 2))
-        self.HP = 500
-        self.bars = []
-        self.bars.append(Bar(self, self.HP, self.HP, 'red', 300, 30))
-
-    def refresh_bar(self, value_type):
-        if value_type == 'HP':
-            return self.HP
-
-    def update(self, *args, **kwargs):
-        if random.randint(0, 100) > 90:
-            EnemyBullet(self.rect.x + self.rect.width / 2 - 20, self.rect.y + self.rect.height / 2,
-                        *random.choices((-5, -3, -2, -1, 1, 2, 3, 5), k=2))
-        if self.HP <= 0:
-            create_particle(self.rect.x + 25, self.rect.y + 12.5)
-            create_particle(self.rect.x + 50, self.rect.y + 25)
-            create_particle(self.rect.x + 25, self.rect.y + 37.5)
-            create_particle(self.rect.x + 50, self.rect.y + 50)
-            create_particle(self.rect.x + 37.5, self.rect.y + 62.5)
-            self.kill()
-            for bar in self.bars:
-                bar.kill()
-
-    def damage(self, damage):
-        self.HP -= damage
 
 
 class Camera:
@@ -1790,7 +1969,7 @@ class RangedWeaponSprite(pygame.sprite.Sprite):
             event = kwargs['event'] if 'event' in kwargs.keys() else None
             if event is not None and keys[pygame.K_f]:
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == pygame.BUTTON_RIGHT:
+                    if event.button == pygame.BUTTON_LEFT:
                         if self.rect.collidepoint(event.pos) and self.rect.colliderect(player.interact_rect):
                             self.pickup()
 
@@ -1923,5 +2102,7 @@ inventory = Inventory()
 
 start_screen()
 level1()
+level2()
+win_screen()
 
 pygame.quit()
