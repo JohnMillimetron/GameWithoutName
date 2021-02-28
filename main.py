@@ -282,7 +282,7 @@ def print_path(path_arr, fin_point):
 
 def start_screen():
     intro_text = [("НАЗВАНИЕ ПОТОМ ПРИДУМАЮ", 80), ("", 50),
-                  ("Демонстрационный уровень", 65), ("Управление: ", 50),
+                  ("Демонстрационная версия", 65), ("Управление: ", 50),
                   ("WASD - перемещение", 30),
                   ("ЛКМ - выстрел", 30),
                   ("ЛКМ + F - взаимодействовать, подобрать предмет", 30),
@@ -588,6 +588,7 @@ def level1():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+                terminate()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 all_sprites.update(event=event, keys=keys)
 
@@ -710,6 +711,7 @@ def level2():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+                terminate()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 all_sprites.update(event=event, keys=keys)
 
